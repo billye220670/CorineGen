@@ -12,33 +12,103 @@ const generateClientId = () => {
 };
 
 const App = () => {
+  // 从localStorage加载保存的设置
+  const loadFromStorage = (key, defaultValue) => {
+    try {
+      const saved = localStorage.getItem(key);
+      return saved !== null ? JSON.parse(saved) : defaultValue;
+    } catch (error) {
+      console.error(`Error loading ${key} from localStorage:`, error);
+      return defaultValue;
+    }
+  };
+
   // 提示词列表状态
-  const [prompts, setPrompts] = useState([
-    { id: 1, text: '', isGenerating: false, focusIndex: null }
-  ]);
+  const [prompts, setPrompts] = useState(() => {
+    const savedPrompts = loadFromStorage('corineGen_prompts', [
+      { id: 1, text: '' }
+    ]);
+    // 恢复时添加运行时状态
+    return savedPrompts.map(p => ({ ...p, isGenerating: false, focusIndex: null }));
+  });
   const [focusedPromptId, setFocusedPromptId] = useState(null);
   const [generationQueue, setGenerationQueue] = useState([]); // 生成队列（用于UI显示）
   const [upscaleQueue, setUpscaleQueue] = useState([]); // 高清化队列（用于UI显示）
   const [isUpscaling, setIsUpscaling] = useState(false); // 高清化进行中
 
-  const [batchSize, setBatchSize] = useState(1);
-  const [batchMethod, setBatchMethod] = useState('loop'); // 'batch' 或 'loop' - 默认循环执行
-  const [steps, setSteps] = useState(9);
-  const [aspectRatio, setAspectRatio] = useState('square');
-  const [seedMode, setSeedMode] = useState('random');
-  const [fixedSeed, setFixedSeed] = useState('');
-  const [firstFixedSeed, setFirstFixedSeed] = useState('');
+  const [batchSize, setBatchSize] = useState(() => loadFromStorage('corineGen_batchSize', 1));
+  const [batchMethod, setBatchMethod] = useState(() => loadFromStorage('corineGen_batchMethod', 'loop'));
+  const [steps, setSteps] = useState(() => loadFromStorage('corineGen_steps', 9));
+  const [aspectRatio, setAspectRatio] = useState(() => loadFromStorage('corineGen_aspectRatio', 'square'));
+  const [seedMode, setSeedMode] = useState(() => loadFromStorage('corineGen_seedMode', 'random'));
+  const [fixedSeed, setFixedSeed] = useState(() => loadFromStorage('corineGen_fixedSeed', ''));
+  const [firstFixedSeed, setFirstFixedSeed] = useState(() => loadFromStorage('corineGen_firstFixedSeed', ''));
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImageGroups, setGeneratedImageGroups] = useState([]); // 按提示词分组的图像
   const [imagePlaceholders, setImagePlaceholders] = useState([]); // 骨架占位
   const [error, setError] = useState('');
+  const [themeHue, setThemeHue] = useState(() => loadFromStorage('corineGen_themeHue', 270));
+  const [themeBgSaturation, setThemeBgSaturation] = useState(() => loadFromStorage('corineGen_themeBgSaturation', 60));
+  const [themeBgLightness, setThemeBgLightness] = useState(() => loadFromStorage('corineGen_themeBgLightness', 8));
+  const [showThemePicker, setShowThemePicker] = useState(false); // 显示颜色选择器
   const firstSeedRef = useRef(null);
-  const nextPromptId = useRef(2);
+
+  // 计算下一个提示词ID
+  const savedPromptsForId = loadFromStorage('corineGen_prompts', [{ id: 1 }]);
+  const nextPromptId = useRef(Math.max(...savedPromptsForId.map(p => p.id)) + 1);
+
   const nextBatchId = useRef(1); // 批次计数器，确保每个批次有唯一ID
   const isUpscalingRef = useRef(false); // 同步跟踪高清化状态，避免竞态条件
   const upscaleQueueRef = useRef([]); // 同步跟踪高清化队列，避免状态更新延迟
   const generationQueueRef = useRef([]); // 同步跟踪生成队列，避免状态更新延迟
   const imagePlaceholdersRef = useRef([]); // 同步跟踪占位符，避免闭包陷阱
+
+  // 保存设置到localStorage
+  useEffect(() => {
+    localStorage.setItem('corineGen_themeHue', JSON.stringify(themeHue));
+  }, [themeHue]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_themeBgSaturation', JSON.stringify(themeBgSaturation));
+  }, [themeBgSaturation]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_themeBgLightness', JSON.stringify(themeBgLightness));
+  }, [themeBgLightness]);
+
+  useEffect(() => {
+    // 保存prompts时去掉isGenerating状态（这是运行时状态，不应该保存）
+    const promptsToSave = prompts.map(p => ({ id: p.id, text: p.text }));
+    localStorage.setItem('corineGen_prompts', JSON.stringify(promptsToSave));
+  }, [prompts]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_batchSize', JSON.stringify(batchSize));
+  }, [batchSize]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_batchMethod', JSON.stringify(batchMethod));
+  }, [batchMethod]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_steps', JSON.stringify(steps));
+  }, [steps]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_aspectRatio', JSON.stringify(aspectRatio));
+  }, [aspectRatio]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_seedMode', JSON.stringify(seedMode));
+  }, [seedMode]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_fixedSeed', JSON.stringify(fixedSeed));
+  }, [fixedSeed]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_firstFixedSeed', JSON.stringify(firstFixedSeed));
+  }, [firstFixedSeed]);
 
   // 辅助函数：更新占位符并同步ref
   const updateImagePlaceholders = (updater) => {
@@ -132,7 +202,7 @@ const App = () => {
     // RepeatLatentBatch的amount设置为1，避免批次数量被平方
     workflow['44'].inputs.amount = 1;
 
-    return workflow;
+    return { workflow, seed };
   };
 
   // 生成单个提示词的图像
@@ -164,7 +234,8 @@ const App = () => {
         upscaleStatus: 'none',
         upscaleProgress: 0,
         hqImageUrl: null,
-        hqFilename: null
+        hqFilename: null,
+        seed: null
       }));
 
       // 先更新ref（同步），再更新state（异步）
@@ -191,22 +262,14 @@ const App = () => {
 
   // 处理队列
   const processQueue = () => {
-    console.log('[processQueue] 被调用');
-    console.log('[processQueue] 队列长度:', generationQueueRef.current.length);
-    console.log('[processQueue] 队列内容:', JSON.stringify(generationQueueRef.current));
-    console.log('[processQueue] isGenerating:', isGenerating);
-
     if (generationQueueRef.current.length === 0) {
-      console.log('[processQueue] 队列为空，设置isGenerating=false');
       setIsGenerating(false);
       return;
     }
 
     const nextTask = generationQueueRef.current[0];
-    console.log('[processQueue] 处理下一个任务:', JSON.stringify(nextTask));
     generationQueueRef.current = generationQueueRef.current.slice(1);
     setGenerationQueue(generationQueueRef.current);
-    console.log('[processQueue] 更新后队列长度:', generationQueueRef.current.length);
     setIsGenerating(true);
     generateForPrompt(nextTask.promptId, nextTask.promptText, nextTask.batchId);
   };
@@ -233,16 +296,14 @@ const App = () => {
       upscaleStatus: 'none',
       upscaleProgress: 0,
       hqImageUrl: null,
-      hqFilename: null
+      hqFilename: null,
+      seed: null
     }));
 
     // 先更新ref（同步），再更新state（异步）
     const updated = [...imagePlaceholdersRef.current, ...placeholders];
     imagePlaceholdersRef.current = updated;
     setImagePlaceholders(updated);
-
-    console.log('[queueGeneration] 更新ref后, 占位符数量:', imagePlaceholdersRef.current.length, '内容:', imagePlaceholdersRef.current.map(p => ({ id: p.id, batchId: p.batchId, status: p.status })));
-    console.log('[queueGeneration] 调用generateForPrompt前, ref占位符数量:', imagePlaceholdersRef.current.length);
 
     if (!isGenerating) {
       // 队列为空，直接开始
@@ -277,7 +338,12 @@ const App = () => {
     let timeoutId = null;
 
     try {
-      const workflow = buildWorkflow(promptText);
+      const { workflow, seed } = buildWorkflow(promptText);
+
+      // 保存种子到所有batchId的占位符
+      updateImagePlaceholders(prev => prev.map(p =>
+        p.batchId === batchId ? { ...p, seed } : p
+      ));
 
       // 创建WebSocket连接
       ws = new WebSocket(`${COMFYUI_WS}?clientId=${clientId}`);
@@ -431,28 +497,21 @@ const App = () => {
 
   // 工作流循环执行模式
   const generateLoop = async (promptId, promptText, placeholders, batchId) => {
-    console.log('[generateLoop] 开始, batchId:', batchId, 'batchSize:', batchSize);
     for (let i = 0; i < batchSize; i++) {
-      console.log(`[generateLoop] 循环 ${i + 1}/${batchSize}`);
       // 每次循环前检查该batchId下是否还有queue状态的占位符
 
       // 使用ref读取最新的占位符状态
-      console.log('[generateLoop] 当前所有占位符:', imagePlaceholdersRef.current.map(p => ({ id: p.id, batchId: p.batchId, status: p.status })));
       const queuedPlaceholders = imagePlaceholdersRef.current.filter(p => p.batchId === batchId && p.status === 'queue');
-      console.log('[generateLoop] 找到的queue占位符:', queuedPlaceholders.map(p => ({ id: p.id, batchId: p.batchId })));
 
       let targetPlaceholder = null;
       if (queuedPlaceholders.length === 0) {
-        console.log('[generateLoop] 未找到queue占位符，结束循环');
         targetPlaceholder = null;
       } else {
         targetPlaceholder = queuedPlaceholders[0];
-        console.log('[generateLoop] 目标占位符:', { id: targetPlaceholder.id, batchId: targetPlaceholder.batchId });
       }
 
       // 如果没有queue状态的占位符了，结束循环
       if (!targetPlaceholder) {
-        console.log('[generateLoop] 跳出循环');
         break;
       }
 
@@ -461,7 +520,12 @@ const App = () => {
       let timeoutId = null;
 
       try {
-        const workflow = buildWorkflow(promptText, 1);
+        const { workflow, seed } = buildWorkflow(promptText, 1);
+
+        // 保存种子到当前占位符
+        updateImagePlaceholders(prev => prev.map(p =>
+          p.id === targetPlaceholder.id ? { ...p, seed } : p
+        ));
 
         // 创建WebSocket连接
         ws = new WebSocket(`${COMFYUI_WS}?clientId=${clientId}`);
@@ -616,7 +680,6 @@ const App = () => {
         throw err;
       }
     }
-    console.log('[generateLoop] 完成, batchId:', batchId);
   };
 
   // 构建高清化工作流
@@ -629,9 +692,8 @@ const App = () => {
 
   // 高清化单张图片
   const upscaleImage = async (placeholderId) => {
-    const placeholder = imagePlaceholders.find(p => p.id === placeholderId);
+    const placeholder = imagePlaceholdersRef.current.find(p => p.id === placeholderId);
     if (!placeholder || !placeholder.filename) {
-      console.error(`[upscaleImage] 无效的占位符或缺少文件名: ${placeholderId}`);
       processUpscaleQueue();
       return;
     }
@@ -674,7 +736,7 @@ const App = () => {
         ws.onopen = () => {};
 
         ws.onerror = (error) => {
-          console.error(`[upscaleImage] WebSocket错误: ${placeholderId}`, error);
+          console.error('WebSocket错误:', error);
           reject(new Error('WebSocket连接失败'));
         };
 
@@ -736,13 +798,13 @@ const App = () => {
 
             // 执行错误消息
             if (type === 'execution_error') {
-              console.error(`[upscaleImage] 执行错误: ${placeholderId}`, data);
+              console.error('执行错误:', data);
               if (ws) ws.close();
               if (timeoutId) clearTimeout(timeoutId);
               reject(new Error(data.exception_message || '未知错误'));
             }
           } catch (err) {
-            console.error(`[upscaleImage] 消息处理错误: ${placeholderId}`, err);
+            console.error('消息处理错误:', err);
           }
         };
       });
@@ -771,7 +833,7 @@ const App = () => {
 
       if (!promptResponse.ok) {
         const errorData = await promptResponse.json();
-        console.error(`[upscaleImage] 提交失败: ${placeholderId}`, errorData);
+        console.error('提交失败:', errorData);
         throw new Error('提交任务失败: ' + JSON.stringify(errorData));
       }
 
@@ -779,7 +841,6 @@ const App = () => {
 
       // 设置超时
       timeoutId = setTimeout(() => {
-        console.error(`[upscaleImage] 超时: ${placeholderId}`);
         if (ws) ws.close();
         reject(new Error('高清化超时'));
       }, 300000);
@@ -788,7 +849,7 @@ const App = () => {
       await executionPromise;
 
     } catch (err) {
-      console.error(`[upscaleImage] 发生错误: ${placeholderId}`, err);
+      console.error('高清化错误:', err);
       // 错误时恢复状态
       updateImagePlaceholders(prev => prev.map(p =>
         p.id === placeholderId ? { ...p, upscaleStatus: 'none', upscaleProgress: 0 } : p
@@ -848,65 +909,35 @@ const App = () => {
 
   // 取消队列中的单个任务
   const cancelQueuedTask = (placeholderId) => {
-    console.log('[cancelQueuedTask] 被调用, placeholderId:', placeholderId);
-
-    // 从ref中获取占位符
     const placeholder = imagePlaceholdersRef.current.find(p => p.id === placeholderId);
-    console.log('[cancelQueuedTask] 找到的占位符:', placeholder);
-
-    if (!placeholder) {
-      console.log('[cancelQueuedTask] 未找到占位符，退出');
-      return;
-    }
+    if (!placeholder) return;
 
     const batchId = placeholder.batchId;
-    console.log('[cancelQueuedTask] batchId:', batchId);
 
     // 删除该占位符 - 先更新ref再更新state
     const filtered = imagePlaceholdersRef.current.filter(p => p.id !== placeholderId);
     imagePlaceholdersRef.current = filtered;
     setImagePlaceholders(filtered);
 
-    console.log('[cancelQueuedTask] 删除后占位符总数:', filtered.length);
-
     // 检查该batchId下是否还有其他queue状态的占位符
     setTimeout(() => {
       const remainingQueuedForBatch = imagePlaceholdersRef.current.filter(p => p.batchId === batchId && p.status === 'queue');
-      console.log('[cancelQueuedTask] batchId', batchId, '剩余queue占位符数量:', remainingQueuedForBatch.length);
 
       // 如果该batchId下没有queue占位符了，从队列中移除该任务
       if (remainingQueuedForBatch.length === 0) {
-        console.log('[cancelQueuedTask] 该batchId下无queue占位符，从队列移除');
-        console.log('[cancelQueuedTask] 移除前队列:', JSON.stringify(generationQueueRef.current));
         generationQueueRef.current = generationQueueRef.current.filter(task => task.batchId !== batchId);
-        console.log('[cancelQueuedTask] 移除后队列:', JSON.stringify(generationQueueRef.current));
         setGenerationQueue(generationQueueRef.current);
-      } else {
-        console.log('[cancelQueuedTask] 该batchId下还有queue占位符，不移除队列任务');
       }
     }, 0);
   };
 
   // 取消高清化队列中的单个任务
   const cancelUpscaleTask = (placeholderId) => {
-    console.log('[cancelUpscaleTask] 被调用, placeholderId:', placeholderId);
-
-    // 从ref中获取占位符
     const placeholder = imagePlaceholdersRef.current.find(p => p.id === placeholderId);
-    console.log('[cancelUpscaleTask] 找到的占位符:', placeholder);
-
-    if (!placeholder) {
-      console.log('[cancelUpscaleTask] 未找到占位符，退出');
-      return;
-    }
+    if (!placeholder) return;
 
     // 只能取消queued状态的任务，不能取消正在upscaling的任务
-    if (placeholder.upscaleStatus !== 'queued') {
-      console.log('[cancelUpscaleTask] 占位符不是queued状态，无法取消, 当前状态:', placeholder.upscaleStatus);
-      return;
-    }
-
-    console.log('[cancelUpscaleTask] 开始取消高清化任务');
+    if (placeholder.upscaleStatus !== 'queued') return;
 
     // 将upscaleStatus改回none - 先更新ref再更新state
     const updated = imagePlaceholdersRef.current.map(p =>
@@ -916,9 +947,7 @@ const App = () => {
     setImagePlaceholders(updated);
 
     // 从高清化队列中移除
-    console.log('[cancelUpscaleTask] 移除前高清化队列:', JSON.stringify(upscaleQueueRef.current));
     upscaleQueueRef.current = upscaleQueueRef.current.filter(id => id !== placeholderId);
-    console.log('[cancelUpscaleTask] 移除后高清化队列:', JSON.stringify(upscaleQueueRef.current));
     setUpscaleQueue(upscaleQueueRef.current);
   };
 
@@ -942,8 +971,74 @@ const App = () => {
   };
 
   return (
-    <div className="app">
+    <div className="app" style={{
+      '--theme-hue': themeHue,
+      '--theme-bg-saturation': themeBgSaturation,
+      '--theme-bg-lightness': themeBgLightness,
+      '--theme-primary': `hsl(${themeHue}, 70%, 65%)`,
+      '--theme-primary-dark': `hsl(${themeHue}, 65%, 54%)`,
+      '--theme-primary-light': `hsl(${themeHue}, 75%, 75%)`,
+      '--theme-accent': `hsl(${(themeHue + 30) % 360}, 75%, 65%)`,
+      '--theme-bg': `hsl(${themeHue}, ${themeBgSaturation}%, ${themeBgLightness - 3}%)`,
+      '--theme-bg-card': `hsl(${themeHue}, ${themeBgSaturation - 10}%, ${themeBgLightness + 2}%)`,
+      '--theme-border': `hsla(${themeHue}, 70%, 65%, 0.3)`,
+      '--theme-border-hover': `hsl(${themeHue}, 70%, 65%)`,
+      '--theme-text': `hsl(${themeHue}, 70%, 92%)`,
+    }}>
       <div className="container">
+        {/* 主题按钮 */}
+        <div className="theme-button-container">
+          <button
+            className="theme-button"
+            onClick={() => setShowThemePicker(!showThemePicker)}
+            title="更改主题颜色"
+          >
+            🎨
+          </button>
+          {showThemePicker && (
+            <div className="theme-picker">
+              <label className="theme-picker-label">主题色相</label>
+              <input
+                type="range"
+                min="0"
+                max="360"
+                value={themeHue}
+                onChange={(e) => setThemeHue(parseInt(e.target.value))}
+                className="theme-slider"
+              />
+
+              <label className="theme-picker-label" style={{ marginTop: '12px' }}>背景饱和度</label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={themeBgSaturation}
+                onChange={(e) => setThemeBgSaturation(parseInt(e.target.value))}
+                className="theme-saturation-slider"
+              />
+
+              <label className="theme-picker-label" style={{ marginTop: '12px' }}>背景亮度</label>
+              <input
+                type="range"
+                min="0"
+                max="30"
+                value={themeBgLightness}
+                onChange={(e) => setThemeBgLightness(parseInt(e.target.value))}
+                className="theme-lightness-slider"
+              />
+
+              <div className="theme-presets">
+                <button onClick={() => setThemeHue(270)} className="theme-preset" style={{ background: 'hsl(270, 70%, 65%)' }}>紫</button>
+                <button onClick={() => setThemeHue(0)} className="theme-preset" style={{ background: 'hsl(0, 70%, 65%)' }}>红</button>
+                <button onClick={() => setThemeHue(120)} className="theme-preset" style={{ background: 'hsl(120, 70%, 65%)' }}>绿</button>
+                <button onClick={() => setThemeHue(200)} className="theme-preset" style={{ background: 'hsl(200, 70%, 65%)' }}>蓝</button>
+                <button onClick={() => setThemeHue(40)} className="theme-preset" style={{ background: 'hsl(40, 70%, 65%)' }}>金</button>
+                <button onClick={() => setThemeHue(300)} className="theme-preset" style={{ background: 'hsl(300, 70%, 65%)' }}>粉</button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <h1 className="title">✨ CorineGen 图像生成器</h1>
 
         <div className="form">
@@ -1013,179 +1108,215 @@ const App = () => {
             </button>
           </div>
 
-          {/* 批次数量 */}
-          <div className="form-group">
-            <label className="label">批次数量</label>
-            <div className="radio-group">
-              {[1, 2, 4, 8, 16].map((size) => (
-                <label key={size} className="radio-label">
+          {/* 高级设置折叠栏 */}
+          <details className="advanced-settings">
+            <summary className="advanced-settings-summary">高级设置</summary>
+            <div className="advanced-settings-content">
+              {/* 批次数量 */}
+              <div className="form-group">
+                <label className="label">批次数量</label>
+                <div className="radio-group">
+                  {[1, 2, 4, 8, 16].map((size) => (
+                    <label key={size} className="radio-label">
+                      <input
+                        type="radio"
+                        name="batchSize"
+                        value={size}
+                        checked={batchSize === size}
+                        onChange={() => setBatchSize(size)}
+                        disabled={isGenerating}
+                      />
+                      <span>{size}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* 批次方法 */}
+              <div className="form-group">
+                <label className="label">批次方法</label>
+                <div className="radio-group">
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="batchMethod"
+                      value="batch"
+                      checked={batchMethod === 'batch'}
+                      onChange={() => setBatchMethod('batch')}
+                      disabled={isGenerating}
+                    />
+                    <span>一次性执行</span>
+                  </label>
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="batchMethod"
+                      value="loop"
+                      checked={batchMethod === 'loop'}
+                      onChange={() => setBatchMethod('loop')}
+                      disabled={isGenerating}
+                    />
+                    <span>工作流循环执行</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Steps滑块 */}
+              <div className="form-group">
+                <label className="label">采样步数 (Steps): {steps}</label>
+                <input
+                  type="range"
+                  min="8"
+                  max="16"
+                  step="1"
+                  value={steps}
+                  onChange={(e) => setSteps(parseInt(e.target.value))}
+                  className="slider"
+                  disabled={isGenerating}
+                />
+              </div>
+
+              {/* 图像比例 */}
+              <div className="form-group">
+                <label className="label">图像比例</label>
+                <div className="radio-group">
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="aspectRatio"
+                      value="square"
+                      checked={aspectRatio === 'square'}
+                      onChange={() => setAspectRatio('square')}
+                      disabled={isGenerating}
+                    />
+                    <span>Square (1:1)</span>
+                  </label>
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="aspectRatio"
+                      value="portrait"
+                      checked={aspectRatio === 'portrait'}
+                      onChange={() => setAspectRatio('portrait')}
+                      disabled={isGenerating}
+                    />
+                    <span>Portrait (9:16)</span>
+                  </label>
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="aspectRatio"
+                      value="landscape"
+                      checked={aspectRatio === 'landscape'}
+                      onChange={() => setAspectRatio('landscape')}
+                      disabled={isGenerating}
+                    />
+                    <span>Landscape (16:9)</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* 种子模式 */}
+              <div className="form-group">
+                <label className="label">种子模式</label>
+                <div className="radio-group">
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="seedMode"
+                      value="random"
+                      checked={seedMode === 'random'}
+                      onChange={() => setSeedMode('random')}
+                      disabled={isGenerating}
+                    />
+                    <span>随机</span>
+                  </label>
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="seedMode"
+                      value="fixed"
+                      checked={seedMode === 'fixed'}
+                      onChange={() => setSeedMode('fixed')}
+                      disabled={isGenerating}
+                    />
+                    <span>固定</span>
+                  </label>
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="seedMode"
+                      value="first-fixed"
+                      checked={seedMode === 'first-fixed'}
+                      onChange={() => setSeedMode('first-fixed')}
+                      disabled={isGenerating}
+                    />
+                    <span>首次固定</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* 固定种子输入 */}
+              {seedMode === 'fixed' && (
+                <div className="form-group">
+                  <label className="label">种子编号</label>
                   <input
-                    type="radio"
-                    name="batchSize"
-                    value={size}
-                    checked={batchSize === size}
-                    onChange={() => setBatchSize(size)}
+                    type="number"
+                    className="input seed-input"
+                    value={fixedSeed}
+                    onChange={(e) => setFixedSeed(e.target.value)}
+                    placeholder="输入种子编号或拖拽图片到此"
                     disabled={isGenerating}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const seed = e.dataTransfer.getData('seed');
+                      if (seed) {
+                        setFixedSeed(seed);
+                      }
+                      e.currentTarget.classList.remove('drag-over');
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.add('drag-over');
+                    }}
+                    onDragLeave={(e) => {
+                      e.currentTarget.classList.remove('drag-over');
+                    }}
                   />
-                  <span>{size}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+                </div>
+              )}
 
-          {/* 批次方法 */}
-          <div className="form-group">
-            <label className="label">批次方法</label>
-            <div className="radio-group">
-              <label className="radio-label">
-                <input
-                  type="radio"
-                  name="batchMethod"
-                  value="batch"
-                  checked={batchMethod === 'batch'}
-                  onChange={() => setBatchMethod('batch')}
-                  disabled={isGenerating}
-                />
-                <span>一次性执行</span>
-              </label>
-              <label className="radio-label">
-                <input
-                  type="radio"
-                  name="batchMethod"
-                  value="loop"
-                  checked={batchMethod === 'loop'}
-                  onChange={() => setBatchMethod('loop')}
-                  disabled={isGenerating}
-                />
-                <span>工作流循环执行</span>
-              </label>
+              {/* 首次固定种子输入 */}
+              {seedMode === 'first-fixed' && (
+                <div className="form-group">
+                  <label className="label">首次种子编号（留空则随机）</label>
+                  <input
+                    type="number"
+                    className="input seed-input"
+                    value={firstFixedSeed}
+                    onChange={(e) => setFirstFixedSeed(e.target.value)}
+                    placeholder="输入首次种子编号或拖拽图片到此"
+                    disabled={isGenerating}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const seed = e.dataTransfer.getData('seed');
+                      if (seed) {
+                        setFirstFixedSeed(seed);
+                      }
+                      e.currentTarget.classList.remove('drag-over');
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.add('drag-over');
+                    }}
+                    onDragLeave={(e) => {
+                      e.currentTarget.classList.remove('drag-over');
+                    }}
+                  />
+                </div>
+              )}
             </div>
-          </div>
-
-          {/* Steps滑块 */}
-          <div className="form-group">
-            <label className="label">采样步数 (Steps): {steps}</label>
-            <input
-              type="range"
-              min="8"
-              max="16"
-              step="1"
-              value={steps}
-              onChange={(e) => setSteps(parseInt(e.target.value))}
-              className="slider"
-              disabled={isGenerating}
-            />
-          </div>
-
-          {/* 图像比例 */}
-          <div className="form-group">
-            <label className="label">图像比例</label>
-            <div className="radio-group">
-              <label className="radio-label">
-                <input
-                  type="radio"
-                  name="aspectRatio"
-                  value="square"
-                  checked={aspectRatio === 'square'}
-                  onChange={() => setAspectRatio('square')}
-                  disabled={isGenerating}
-                />
-                <span>Square (1:1)</span>
-              </label>
-              <label className="radio-label">
-                <input
-                  type="radio"
-                  name="aspectRatio"
-                  value="portrait"
-                  checked={aspectRatio === 'portrait'}
-                  onChange={() => setAspectRatio('portrait')}
-                  disabled={isGenerating}
-                />
-                <span>Portrait (9:16)</span>
-              </label>
-              <label className="radio-label">
-                <input
-                  type="radio"
-                  name="aspectRatio"
-                  value="landscape"
-                  checked={aspectRatio === 'landscape'}
-                  onChange={() => setAspectRatio('landscape')}
-                  disabled={isGenerating}
-                />
-                <span>Landscape (16:9)</span>
-              </label>
-            </div>
-          </div>
-
-          {/* 种子模式 */}
-          <div className="form-group">
-            <label className="label">种子模式</label>
-            <div className="radio-group">
-              <label className="radio-label">
-                <input
-                  type="radio"
-                  name="seedMode"
-                  value="random"
-                  checked={seedMode === 'random'}
-                  onChange={() => setSeedMode('random')}
-                  disabled={isGenerating}
-                />
-                <span>随机</span>
-              </label>
-              <label className="radio-label">
-                <input
-                  type="radio"
-                  name="seedMode"
-                  value="fixed"
-                  checked={seedMode === 'fixed'}
-                  onChange={() => setSeedMode('fixed')}
-                  disabled={isGenerating}
-                />
-                <span>固定</span>
-              </label>
-              <label className="radio-label">
-                <input
-                  type="radio"
-                  name="seedMode"
-                  value="first-fixed"
-                  checked={seedMode === 'first-fixed'}
-                  onChange={() => setSeedMode('first-fixed')}
-                  disabled={isGenerating}
-                />
-                <span>首次固定</span>
-              </label>
-            </div>
-          </div>
-
-          {/* 固定种子输入 */}
-          {seedMode === 'fixed' && (
-            <div className="form-group">
-              <label className="label">种子编号</label>
-              <input
-                type="number"
-                className="input"
-                value={fixedSeed}
-                onChange={(e) => setFixedSeed(e.target.value)}
-                placeholder="输入种子编号"
-                disabled={isGenerating}
-              />
-            </div>
-          )}
-
-          {/* 首次固定种子输入 */}
-          {seedMode === 'first-fixed' && (
-            <div className="form-group">
-              <label className="label">首次种子编号（留空则随机）</label>
-              <input
-                type="number"
-                className="input"
-                value={firstFixedSeed}
-                onChange={(e) => setFirstFixedSeed(e.target.value)}
-                placeholder="输入首次种子编号（可选）"
-                disabled={isGenerating}
-              />
-            </div>
-          )}
+          </details>
 
           {/* 错误信息 */}
           {error && <div className="error">{error}</div>}
@@ -1195,9 +1326,6 @@ const App = () => {
         <div className="images-container">
           {imagePlaceholders.length > 0 ? (
             <>
-              <h2 className="images-title">
-                {isGenerating ? '生成中...' : '生成的图像'}
-              </h2>
               <div className="images-grid">
                 {imagePlaceholders.map((placeholder) => (
                   <div key={placeholder.id} className="image-placeholder">
@@ -1208,9 +1336,14 @@ const App = () => {
                           src={placeholder.imageUrl}
                           alt={`Generated ${placeholder.id}`}
                           onClick={() => placeholder.status === 'completed' && downloadImage(placeholder.imageUrl, placeholder.hqFilename || placeholder.filename)}
-                          title={placeholder.status === 'completed' ? '点击下载' : ''}
                           className={`generated-image ${placeholder.status === 'revealing' || placeholder.status === 'completed' ? 'revealing' : ''} ${placeholder.upscaleStatus === 'upscaling' ? 'upscaling-blur' : ''}`}
                           style={{ pointerEvents: placeholder.status === 'completed' ? 'auto' : 'none' }}
+                          draggable={placeholder.status === 'completed' && placeholder.seed !== null}
+                          onDragStart={(e) => {
+                            if (placeholder.status === 'completed' && placeholder.seed !== null) {
+                              e.dataTransfer.setData('seed', placeholder.seed.toString());
+                            }
+                          }}
                         />
                       )}
                       {/* 取消按钮 - 仅在queue状态显示 */}

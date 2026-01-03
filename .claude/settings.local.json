@@ -10,7 +10,8 @@
       "WebFetch(domain:docs.comfy.org)",
       "WebFetch(domain:www.viewcomfy.com)",
       "WebFetch(domain:9elements.com)",
-      "WebFetch(domain:dev.to)"
+      "WebFetch(domain:dev.to)",
+      "Bash(npm run dev:*)"
     ]
   }
 }
