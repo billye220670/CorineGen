@@ -40,6 +40,7 @@ const App = () => {
   const [batchSize, setBatchSize] = useState(() => loadFromStorage('corineGen_batchSize', 1));
   const [batchMethod, setBatchMethod] = useState(() => loadFromStorage('corineGen_batchMethod', 'loop'));
   const [steps, setSteps] = useState(() => loadFromStorage('corineGen_steps', 9));
+  const [resolutionScale, setResolutionScale] = useState(() => loadFromStorage('corineGen_resolutionScale', 1));
   const [aspectRatio, setAspectRatio] = useState(() => loadFromStorage('corineGen_aspectRatio', 'square'));
   const [seedMode, setSeedMode] = useState(() => loadFromStorage('corineGen_seedMode', 'random'));
   const [fixedSeed, setFixedSeed] = useState(() => loadFromStorage('corineGen_fixedSeed', ''));
@@ -95,6 +96,10 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('corineGen_steps', JSON.stringify(steps));
   }, [steps]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_resolutionScale', JSON.stringify(resolutionScale));
+  }, [resolutionScale]);
 
   useEffect(() => {
     localStorage.setItem('corineGen_aspectRatio', JSON.stringify(aspectRatio));
@@ -172,15 +177,39 @@ const App = () => {
 
   // 获取图像尺寸
   const getImageDimensions = () => {
+    let baseWidth, baseHeight;
     switch (aspectRatio) {
       case 'portrait':
-        return { width: 720, height: 1280 };
+        baseWidth = 720;
+        baseHeight = 1280;
+        break;
       case 'landscape':
-        return { width: 1280, height: 720 };
+        baseWidth = 1280;
+        baseHeight = 720;
+        break;
+      case '4:3':
+        baseWidth = 1152;
+        baseHeight = 864;
+        break;
+      case '3:4':
+        baseWidth = 864;
+        baseHeight = 1152;
+        break;
+      case '2.35:1':
+        baseWidth = 1536;
+        baseHeight = 656;
+        break;
       case 'square':
       default:
-        return { width: 1024, height: 1024 };
+        baseWidth = 1024;
+        baseHeight = 1024;
     }
+
+    // 应用超分倍率
+    return {
+      width: Math.round(baseWidth * resolutionScale),
+      height: Math.round(baseHeight * resolutionScale)
+    };
   };
 
   // 获取图像比例（用于网格布局）
@@ -190,6 +219,12 @@ const App = () => {
         return 720 / 1280; // 0.5625
       case 'landscape':
         return 1280 / 720; // 1.778
+      case '4:3':
+        return 1152 / 864; // 1.333
+      case '3:4':
+        return 864 / 1152; // 0.75
+      case '2.35:1':
+        return 1536 / 656; // 2.341
       case 'square':
       default:
         return 1; // 1:1
@@ -212,9 +247,48 @@ const App = () => {
   };
 
   // 构建ComfyUI工作流
-  const buildWorkflow = (promptText, actualBatchSize = null) => {
+  const buildWorkflow = (promptText, actualBatchSize = null, savedParams = null) => {
     const workflow = JSON.parse(JSON.stringify(workflowTemplate));
-    const dimensions = getImageDimensions();
+
+    // 如果提供了保存的参数，使用保存的参数；否则使用当前全局状态
+    const currentAspectRatio = savedParams?.aspectRatio || aspectRatio;
+    const currentResolutionScale = savedParams?.resolutionScale || resolutionScale;
+    const currentSteps = savedParams?.steps || steps;
+
+    // 计算尺寸（使用保存的参数）
+    let baseWidth, baseHeight;
+    switch (currentAspectRatio) {
+      case 'portrait':
+        baseWidth = 720;
+        baseHeight = 1280;
+        break;
+      case 'landscape':
+        baseWidth = 1280;
+        baseHeight = 720;
+        break;
+      case '4:3':
+        baseWidth = 1152;
+        baseHeight = 864;
+        break;
+      case '3:4':
+        baseWidth = 864;
+        baseHeight = 1152;
+        break;
+      case '2.35:1':
+        baseWidth = 1536;
+        baseHeight = 656;
+        break;
+      case 'square':
+      default:
+        baseWidth = 1024;
+        baseHeight = 1024;
+    }
+
+    const dimensions = {
+      width: Math.round(baseWidth * currentResolutionScale),
+      height: Math.round(baseHeight * currentResolutionScale)
+    };
+
     const seed = getSeed();
 
     // 处理prompt：如果缺少yjy触发词，自动添加
@@ -229,8 +303,8 @@ const App = () => {
     // 更新种子
     workflow['4'].inputs.seed = seed;
 
-    // 更新steps
-    workflow['4'].inputs.steps = steps;
+    // 更新steps（使用保存的参数）
+    workflow['4'].inputs.steps = currentSteps;
 
     // 更新图像尺寸
     workflow['7'].inputs.width = dimensions.width;
@@ -265,6 +339,14 @@ const App = () => {
       finalBatchId = nextBatchId.current++;
       const totalImages = batchSize;
       const currentAspectRatio = getAspectRatioValue();
+
+      // 保存当前生成参数
+      const savedParams = {
+        aspectRatio: aspectRatio,
+        resolutionScale: resolutionScale,
+        steps: steps
+      };
+
       placeholders = Array.from({ length: totalImages }, (_, index) => ({
         id: `${promptId}-${finalBatchId}-${index}`,
         status: 'queue',
@@ -278,7 +360,8 @@ const App = () => {
         hqImageUrl: null,
         hqFilename: null,
         seed: null,
-        aspectRatio: currentAspectRatio // 保存当前图像比例
+        aspectRatio: currentAspectRatio, // 保存当前图像比例（用于显示）
+        savedParams: savedParams // 保存生成参数（用于生成）
       }));
 
       // 先更新ref（同步），再更新state（异步）
@@ -287,11 +370,15 @@ const App = () => {
       setImagePlaceholders(updated);
     }
 
+    // 从占位符中获取保存的生成参数
+    const batchPlaceholders = imagePlaceholdersRef.current.filter(p => p.batchId === finalBatchId);
+    const savedParams = batchPlaceholders[0]?.savedParams || null;
+
     try {
       if (batchMethod === 'batch') {
-        await generateBatch(promptId, promptText, placeholders, finalBatchId);
+        await generateBatch(promptId, promptText, placeholders, finalBatchId, savedParams);
       } else {
-        await generateLoop(promptId, promptText, placeholders, finalBatchId);
+        await generateLoop(promptId, promptText, placeholders, finalBatchId, savedParams);
       }
     } catch (err) {
       console.error('[generateForPrompt] 生成错误:', err);
@@ -329,6 +416,14 @@ const App = () => {
     const batchId = nextBatchId.current++;
     const totalImages = batchSize;
     const currentAspectRatio = getAspectRatioValue();
+
+    // 保存当前生成参数
+    const savedParams = {
+      aspectRatio: aspectRatio,
+      resolutionScale: resolutionScale,
+      steps: steps
+    };
+
     const placeholders = Array.from({ length: totalImages }, (_, index) => ({
       id: `${promptId}-${batchId}-${index}`,
       status: 'queue',
@@ -342,7 +437,8 @@ const App = () => {
       hqImageUrl: null,
       hqFilename: null,
       seed: null,
-      aspectRatio: currentAspectRatio // 保存当前图像比例
+      aspectRatio: currentAspectRatio, // 保存当前图像比例（用于显示）
+      savedParams: savedParams // 保存生成参数（用于生成）
     }));
 
     // 先更新ref（同步），再更新state（异步）
@@ -355,8 +451,8 @@ const App = () => {
       setIsGenerating(true);
       generateForPrompt(promptId, prompt.text, batchId);
     } else {
-      // 添加到队列
-      generationQueueRef.current = [...generationQueueRef.current, { promptId, promptText: prompt.text, batchId }];
+      // 添加到队列，同时保存生成参数
+      generationQueueRef.current = [...generationQueueRef.current, { promptId, promptText: prompt.text, batchId, savedParams }];
       setGenerationQueue(generationQueueRef.current);
     }
   };
@@ -377,13 +473,13 @@ const App = () => {
   };
 
   // 一次性批次模式
-  const generateBatch = async (promptId, promptText, placeholders, batchId) => {
+  const generateBatch = async (promptId, promptText, placeholders, batchId, savedParams = null) => {
     const clientId = generateClientId();
     let ws = null;
     let timeoutId = null;
 
     try {
-      const { workflow, seed } = buildWorkflow(promptText);
+      const { workflow, seed } = buildWorkflow(promptText, null, savedParams);
 
       // 保存种子到所有batchId的占位符
       updateImagePlaceholders(prev => prev.map(p =>
@@ -541,7 +637,7 @@ const App = () => {
   };
 
   // 工作流循环执行模式
-  const generateLoop = async (promptId, promptText, placeholders, batchId) => {
+  const generateLoop = async (promptId, promptText, placeholders, batchId, savedParams = null) => {
     for (let i = 0; i < batchSize; i++) {
       // 每次循环前检查该batchId下是否还有queue状态的占位符
 
@@ -565,7 +661,7 @@ const App = () => {
       let timeoutId = null;
 
       try {
-        const { workflow, seed } = buildWorkflow(promptText, 1);
+        const { workflow, seed } = buildWorkflow(promptText, 1, savedParams);
 
         // 保存种子到当前占位符
         updateImagePlaceholders(prev => prev.map(p =>
@@ -1154,7 +1250,6 @@ const App = () => {
             <button
               className="generate-all-button"
               onClick={generateAll}
-              disabled={isGenerating}
             >
               → 全部生成
             </button>
@@ -1176,7 +1271,6 @@ const App = () => {
                         value={size}
                         checked={batchSize === size}
                         onChange={() => setBatchSize(size)}
-                        disabled={isGenerating}
                       />
                       <span>{size}</span>
                     </label>
@@ -1195,7 +1289,6 @@ const App = () => {
                       value="batch"
                       checked={batchMethod === 'batch'}
                       onChange={() => setBatchMethod('batch')}
-                      disabled={isGenerating}
                     />
                     <span>一次性执行</span>
                   </label>
@@ -1206,7 +1299,6 @@ const App = () => {
                       value="loop"
                       checked={batchMethod === 'loop'}
                       onChange={() => setBatchMethod('loop')}
-                      disabled={isGenerating}
                     />
                     <span>工作流循环执行</span>
                   </label>
@@ -1224,8 +1316,24 @@ const App = () => {
                   value={steps}
                   onChange={(e) => setSteps(parseInt(e.target.value))}
                   className="slider"
-                  disabled={isGenerating}
                 />
+              </div>
+
+              {/* 超分倍率滑块 */}
+              <div className="form-group">
+                <label className="label">超分倍率: {resolutionScale.toFixed(1)}x</label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2"
+                  step="0.1"
+                  value={resolutionScale}
+                  onChange={(e) => setResolutionScale(parseFloat(e.target.value))}
+                  className="slider"
+                />
+                <p className="resolution-display">
+                  目标分辨率: {getImageDimensions().width} × {getImageDimensions().height}
+                </p>
               </div>
 
               {/* 图像比例 */}
@@ -1239,7 +1347,6 @@ const App = () => {
                       value="square"
                       checked={aspectRatio === 'square'}
                       onChange={() => setAspectRatio('square')}
-                      disabled={isGenerating}
                     />
                     <span>Square (1:1)</span>
                   </label>
@@ -1250,7 +1357,6 @@ const App = () => {
                       value="portrait"
                       checked={aspectRatio === 'portrait'}
                       onChange={() => setAspectRatio('portrait')}
-                      disabled={isGenerating}
                     />
                     <span>Portrait (9:16)</span>
                   </label>
@@ -1261,9 +1367,38 @@ const App = () => {
                       value="landscape"
                       checked={aspectRatio === 'landscape'}
                       onChange={() => setAspectRatio('landscape')}
-                      disabled={isGenerating}
                     />
                     <span>Landscape (16:9)</span>
+                  </label>
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="aspectRatio"
+                      value="4:3"
+                      checked={aspectRatio === '4:3'}
+                      onChange={() => setAspectRatio('4:3')}
+                    />
+                    <span>4:3</span>
+                  </label>
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="aspectRatio"
+                      value="3:4"
+                      checked={aspectRatio === '3:4'}
+                      onChange={() => setAspectRatio('3:4')}
+                    />
+                    <span>3:4</span>
+                  </label>
+                  <label className="radio-label">
+                    <input
+                      type="radio"
+                      name="aspectRatio"
+                      value="2.35:1"
+                      checked={aspectRatio === '2.35:1'}
+                      onChange={() => setAspectRatio('2.35:1')}
+                    />
+                    <span>2.35:1 (Cinema)</span>
                   </label>
                 </div>
               </div>
@@ -1279,7 +1414,6 @@ const App = () => {
                       value="random"
                       checked={seedMode === 'random'}
                       onChange={() => setSeedMode('random')}
-                      disabled={isGenerating}
                     />
                     <span>随机</span>
                   </label>
@@ -1290,7 +1424,6 @@ const App = () => {
                       value="fixed"
                       checked={seedMode === 'fixed'}
                       onChange={() => setSeedMode('fixed')}
-                      disabled={isGenerating}
                     />
                     <span>固定</span>
                   </label>
@@ -1301,7 +1434,6 @@ const App = () => {
                       value="first-fixed"
                       checked={seedMode === 'first-fixed'}
                       onChange={() => setSeedMode('first-fixed')}
-                      disabled={isGenerating}
                     />
                     <span>首次固定</span>
                   </label>
@@ -1318,7 +1450,6 @@ const App = () => {
                     value={fixedSeed}
                     onChange={(e) => setFixedSeed(e.target.value)}
                     placeholder="输入种子编号或拖拽图片到此"
-                    disabled={isGenerating}
                     onDrop={(e) => {
                       e.preventDefault();
                       const seed = e.dataTransfer.getData('seed');
@@ -1348,7 +1479,6 @@ const App = () => {
                     value={firstFixedSeed}
                     onChange={(e) => setFirstFixedSeed(e.target.value)}
                     placeholder="输入首次种子编号或拖拽图片到此"
-                    disabled={isGenerating}
                     onDrop={(e) => {
                       e.preventDefault();
                       const seed = e.dataTransfer.getData('seed');

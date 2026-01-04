@@ -602,6 +602,15 @@ body {
   cursor: not-allowed;
 }
 
+/* 目标分辨率显示 */
+.resolution-display {
+  margin-top: 8px;
+  margin-bottom: 0;
+  color: hsla(calc(var(--theme-hue) * 1), 70%, 92%, 0.5);
+  font-size: 0.85rem;
+  text-align: left;
+}
+
 /* 高级设置折叠栏 */
 .advanced-settings {
   margin-top: 16px;
