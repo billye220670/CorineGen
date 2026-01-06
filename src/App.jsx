@@ -374,6 +374,7 @@ const App = () => {
       placeholders = Array.from({ length: totalImages }, (_, index) => ({
         id: `${promptId}-${finalBatchId}-${index}`,
         status: 'queue',
+        isLoading: false, // 是否正在加载模型
         progress: 0,
         imageUrl: null,
         filename: null,
@@ -464,6 +465,7 @@ const App = () => {
     const placeholders = Array.from({ length: totalImages }, (_, index) => ({
       id: `${promptId}-${batchId}-${index}`,
       status: 'queue',
+      isLoading: false, // 是否正在加载模型
       progress: 0,
       imageUrl: null,
       filename: null,
@@ -544,6 +546,16 @@ const App = () => {
 
           const message = JSON.parse(event.data);
           const { type, data } = message;
+
+          // execution_start 消息 - 任务开始执行（模型可能正在加载）
+          if (type === 'execution_start') {
+            updateImagePlaceholders(prev => prev.map(p =>
+              p.batchId === batchId && p.status === 'queue' ? {
+                ...p,
+                isLoading: true
+              } : p
+            ));
+          }
 
           // 进度更新消息 - 批次模式下所有图片共享进度
           if (type === 'progress') {
@@ -751,6 +763,16 @@ const App = () => {
 
               const message = JSON.parse(event.data);
               const { type, data } = message;
+
+              // execution_start 消息 - 任务开始执行（模型可能正在加载）
+              if (type === 'execution_start') {
+                updateImagePlaceholders(prev => prev.map(p =>
+                  p.id === targetPlaceholder.id && p.status === 'queue' ? {
+                    ...p,
+                    isLoading: true
+                  } : p
+                ));
+              }
 
               // 进度更新消息 - 更新当前图片的进度
               if (type === 'progress') {
@@ -1682,8 +1704,14 @@ const App = () => {
                                       `${placeholder.progress}%`
                             }}
                           ></div>
-                          <div className="skeleton-text">
-                            {placeholder.status === 'queue' ? 'Queue' :
+                          <div className={`skeleton-text ${
+                            placeholder.status === 'queue' ? (placeholder.isLoading ? 'loading-state' : 'queue-pulse') : ''
+                          }`}>
+                            {placeholder.status === 'queue' ? (
+                              placeholder.isLoading ? (
+                                <span>Loading<span className="loading-dots"></span></span>
+                              ) : 'Queue'
+                            ) :
                              placeholder.status === 'revealing' ? '' :
                              placeholder.upscaleStatus === 'upscaling' ? `${placeholder.upscaleProgress}%` :
                              `${placeholder.progress}%`}

@@ -921,6 +921,45 @@ body {
   opacity: 0;
 }
 
+/* Queue 状态脉冲动画 */
+.skeleton-text.queue-pulse {
+  animation: queuePulse 2s ease-in-out infinite;
+}
+
+@keyframes queuePulse {
+  0%, 100% {
+    opacity: 0.6;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+}
+
+/* Loading 状态样式 */
+.skeleton-text.loading-state {
+  animation: loadingPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes loadingPulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* Loading 点动画 */
+.loading-dots::after {
+  content: '';
+  animation: loadingDots 1.5s steps(4, end) infinite;
+}
+
+@keyframes loadingDots {
+  0% { content: ''; }
+  25% { content: '.'; }
+  50% { content: '..'; }
+  75% { content: '...'; }
+}
+
 /* 空状态占位 */
 .empty-placeholder {
   display: flex;
