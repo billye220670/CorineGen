@@ -429,7 +429,9 @@ const App = () => {
         hqFilename: null,
         seed: null,
         aspectRatio: currentAspectRatio, // 保存当前图像比例（用于显示）
-        savedParams: savedParams // 保存生成参数（用于生成）
+        savedParams: savedParams, // 保存生成参数（用于生成）
+        displayQuality: 'hq', // 当前显示的清晰度：'sq' 标清 或 'hq' 高清
+        showQualityMenu: false // 是否显示清晰度切换菜单
       }));
 
       console.log('[generateForPrompt] 创建占位符:', placeholders.map(p => ({ id: p.id, status: p.status, imageUrl: p.imageUrl })));
@@ -524,7 +526,9 @@ const App = () => {
       hqFilename: null,
       seed: null,
       aspectRatio: currentAspectRatio, // 保存当前图像比例（用于显示）
-      savedParams: savedParams // 保存生成参数（用于生成）
+      savedParams: savedParams, // 保存生成参数（用于生成）
+      displayQuality: 'hq', // 当前显示的清晰度：'sq' 标清 或 'hq' 高清
+      showQualityMenu: false // 是否显示清晰度切换菜单
     }));
 
     // 先更新ref（同步），再更新state（异步）
@@ -1064,15 +1068,15 @@ const App = () => {
                       const img = outputs[nodeId].images[0];
                       const hqImageUrl = `${COMFYUI_API}/view?filename=${img.filename}&subfolder=${img.subfolder}&type=${img.type}&t=${Date.now()}`;
 
-                      // 更新占位符，替换为高清图片
+                      // 更新占位符，保存高清图片（不替换原图，以便用户切换清晰度）
                       updateImagePlaceholders(prev => prev.map(p =>
                         p.id === placeholderId ? {
                           ...p,
                           upscaleStatus: 'completed',
                           upscaleProgress: 100,
                           hqImageUrl: hqImageUrl,
-                          hqFilename: img.filename,
-                          imageUrl: hqImageUrl // 替换原图
+                          hqFilename: img.filename
+                          // 不再替换 imageUrl，保留原始标清图
                         } : p
                       ));
                     }
@@ -1249,6 +1253,24 @@ const App = () => {
     setUpscaleQueue(upscaleQueueRef.current);
   };
 
+  // 切换清晰度菜单的显示/隐藏
+  const toggleQualityMenu = (placeholderId) => {
+    updateImagePlaceholders(prev => prev.map(p =>
+      p.id === placeholderId
+        ? { ...p, showQualityMenu: !p.showQualityMenu }
+        : { ...p, showQualityMenu: false } // 关闭其他菜单
+    ));
+  };
+
+  // 切换显示的清晰度
+  const setDisplayQuality = (placeholderId, quality) => {
+    updateImagePlaceholders(prev => prev.map(p =>
+      p.id === placeholderId
+        ? { ...p, displayQuality: quality, showQualityMenu: false }
+        : p
+    ));
+  };
+
   // 下载图片
   const downloadImage = async (imageUrl, filename) => {
     try {
@@ -1326,7 +1348,7 @@ const App = () => {
               <input
                 type="range"
                 min="0"
-                max="30"
+                max="80"
                 value={themeBgLightness}
                 onChange={(e) => setThemeBgLightness(parseInt(e.target.value))}
                 className="theme-lightness-slider"
@@ -1704,9 +1726,22 @@ const App = () => {
                       {/* 背景图片 */}
                       {(placeholder.status === 'revealing' || placeholder.status === 'completed') && placeholder.imageUrl && (
                         <img
-                          src={placeholder.imageUrl}
+                          src={
+                            // 根据清晰度选择显示的图片
+                            placeholder.upscaleStatus === 'completed' && placeholder.displayQuality === 'hq' && placeholder.hqImageUrl
+                              ? placeholder.hqImageUrl
+                              : placeholder.imageUrl
+                          }
                           alt={`Generated ${placeholder.id}`}
-                          onClick={() => placeholder.status === 'completed' && downloadImage(placeholder.imageUrl, placeholder.hqFilename || placeholder.filename)}
+                          onClick={() => {
+                            if (placeholder.status === 'completed') {
+                              // 根据当前显示的清晰度下载对应版本
+                              const isHQ = placeholder.upscaleStatus === 'completed' && placeholder.displayQuality === 'hq' && placeholder.hqImageUrl;
+                              const url = isHQ ? placeholder.hqImageUrl : placeholder.imageUrl;
+                              const filename = isHQ ? placeholder.hqFilename : placeholder.filename;
+                              downloadImage(url, filename);
+                            }
+                          }}
                           className={`generated-image ${placeholder.status === 'revealing' || placeholder.status === 'completed' ? 'revealing' : ''} ${placeholder.upscaleStatus === 'upscaling' ? 'upscaling-blur' : ''}`}
                           style={{ pointerEvents: placeholder.status === 'completed' ? 'auto' : 'none' }}
                           draggable={placeholder.status === 'completed' && placeholder.seed !== null}
@@ -1729,27 +1764,53 @@ const App = () => {
                       )}
                       {/* HQ按钮 - 仅在completed状态显示 */}
                       {placeholder.status === 'completed' && (
-                        <button
-                          className={`hq-button ${placeholder.upscaleStatus === 'completed' ? 'completed' : ''} ${placeholder.upscaleStatus === 'upscaling' ? 'disabled' : ''} ${placeholder.upscaleStatus === 'queued' ? 'queued' : ''}`}
-                          onClick={() => {
-                            if (placeholder.upscaleStatus === 'none') {
-                              queueUpscale(placeholder.id);
-                            } else if (placeholder.upscaleStatus === 'queued') {
-                              cancelUpscaleTask(placeholder.id);
+                        <div className="hq-button-container">
+                          <button
+                            className={`hq-button ${placeholder.upscaleStatus === 'completed' ? 'completed' : ''} ${placeholder.upscaleStatus === 'upscaling' ? 'disabled' : ''} ${placeholder.upscaleStatus === 'queued' ? 'queued' : ''}`}
+                            onClick={() => {
+                              if (placeholder.upscaleStatus === 'completed') {
+                                toggleQualityMenu(placeholder.id);
+                              } else if (placeholder.upscaleStatus === 'none') {
+                                queueUpscale(placeholder.id);
+                              } else if (placeholder.upscaleStatus === 'queued') {
+                                cancelUpscaleTask(placeholder.id);
+                              }
+                            }}
+                            disabled={placeholder.upscaleStatus === 'upscaling'}
+                            title={
+                              placeholder.upscaleStatus === 'completed' ? '点击切换清晰度' :
+                              placeholder.upscaleStatus === 'queued' ? '点击取消高清化' :
+                              placeholder.upscaleStatus === 'upscaling' ? '高清化中...' :
+                              '点击高清化'
                             }
-                          }}
-                          disabled={placeholder.upscaleStatus === 'upscaling'}
-                          title={
-                            placeholder.upscaleStatus === 'completed' ? '已完成高清化' :
-                            placeholder.upscaleStatus === 'queued' ? '点击取消高清化' :
-                            placeholder.upscaleStatus === 'upscaling' ? '高清化中...' :
-                            '点击高清化'
-                          }
-                        >
-                          {placeholder.upscaleStatus === 'completed' ? 'HQ Done' :
-                           placeholder.upscaleStatus === 'queued' ? 'Cancel HQ' :
-                           'HQ'}
-                        </button>
+                          >
+                            {placeholder.upscaleStatus === 'completed' ? (
+                              <>
+                                {placeholder.displayQuality === 'hq' ? 'HQ' : 'SQ'}
+                                <span className="quality-arrow">▲</span>
+                              </>
+                            ) :
+                             placeholder.upscaleStatus === 'queued' ? 'Cancel HQ' :
+                             'HQ'}
+                          </button>
+                          {/* 清晰度切换菜单 */}
+                          {placeholder.showQualityMenu && placeholder.upscaleStatus === 'completed' && (
+                            <div className="quality-menu">
+                              <button
+                                className={`quality-option ${placeholder.displayQuality === 'sq' ? 'active' : ''}`}
+                                onClick={() => setDisplayQuality(placeholder.id, 'sq')}
+                              >
+                                SQ 标清
+                              </button>
+                              <button
+                                className={`quality-option ${placeholder.displayQuality === 'hq' ? 'active' : ''}`}
+                                onClick={() => setDisplayQuality(placeholder.id, 'hq')}
+                              >
+                                HQ 高清
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                       {/* 进度条幕布 - 生成中或高清化中显示 */}
                       {(placeholder.status !== 'completed' || placeholder.upscaleStatus === 'upscaling') && (

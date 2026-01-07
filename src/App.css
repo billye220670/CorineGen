@@ -879,9 +879,91 @@ body {
 }
 
 .hq-button.completed {
-  background: rgba(100, 100, 100, 0.7);
-  cursor: not-allowed;
-  color: rgba(255, 255, 255, 0.6);
+  background: rgba(100, 100, 100, 0.8);
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hq-button.completed:hover {
+  background: rgba(80, 80, 80, 0.9);
+  transform: translateY(-2px);
+}
+
+/* 清晰度按钮容器 */
+.hq-button-container {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  z-index: 10;
+}
+
+.hq-button-container .hq-button {
+  position: relative;
+  bottom: auto;
+  right: auto;
+}
+
+/* 上箭头 */
+.quality-arrow {
+  font-size: 0.6rem;
+  margin-left: 2px;
+  transition: transform 0.2s ease;
+}
+
+/* 清晰度切换菜单 */
+.quality-menu {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 6px;
+  background: rgba(40, 40, 40, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  animation: menuSlideUp 0.2s ease-out;
+}
+
+@keyframes menuSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.quality-option {
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.quality-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.quality-option.active {
+  background: var(--theme-primary);
+  color: white;
 }
 
 .hq-button.queued {
