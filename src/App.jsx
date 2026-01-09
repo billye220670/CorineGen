@@ -1784,7 +1784,7 @@ const App = () => {
                 <div className="form-group">
                   <label className="label">批次数量</label>
                   <div className="radio-group">
-                    {[1, 2, 4, 8, 16].map((size) => (
+                    {[1, 2, 4, 8].map((size) => (
                       <label key={size} className="radio-label">
                         <input
                           type="radio"
@@ -1799,7 +1799,8 @@ const App = () => {
                   </div>
                 </div>
 
-                {/* 批次方法 */}
+                {/* 批次方法 - 暂时隐藏一次性执行选项 */}
+                {/*
                 <div className="form-group">
                   <label className="label">批次方法</label>
                   <div className="radio-group">
@@ -1825,6 +1826,7 @@ const App = () => {
                     </label>
                   </div>
                 </div>
+                */}
 
                 {/* Steps滑块 */}
                 <div className="form-group">
@@ -1993,6 +1995,7 @@ const App = () => {
                     />
                     <span>3:4</span>
                   </label>
+                  {/* 2.35:1 暂时隐藏
                   <label className="radio-label">
                     <input
                       type="radio"
@@ -2003,6 +2006,7 @@ const App = () => {
                     />
                     <span>2.35:1 (Cinema)</span>
                   </label>
+                  */}
                 </div>
               </div>
               </div>
