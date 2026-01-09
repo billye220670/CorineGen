@@ -83,6 +83,8 @@ const App = () => {
   const [showSettingsPanel, setShowSettingsPanel] = useState(false); // 设置面板显示状态
   const [showThemeSection, setShowThemeSection] = useState(false); // 主题区域展开状态
   const [showLoraManager, setShowLoraManager] = useState(false); // LoRA管理列表展开状态
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false); // 多选模式
+  const [selectedImages, setSelectedImages] = useState(new Set()); // 选中的图片ID集合
 
   const firstSeedRef = useRef(null);
   const heartbeatRef = useRef(null); // 心跳检测定时器
@@ -1427,6 +1429,72 @@ const App = () => {
     ));
   };
 
+  // 删除单张图片（仅前端UI）
+  const deleteImage = (placeholderId) => {
+    updateImagePlaceholders(prev => prev.filter(p => p.id !== placeholderId));
+    // 如果在多选模式下，也从选中集合中移除
+    setSelectedImages(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(placeholderId);
+      return newSet;
+    });
+  };
+
+  // 切换图片选中状态
+  const toggleImageSelection = (placeholderId) => {
+    setSelectedImages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(placeholderId)) {
+        newSet.delete(placeholderId);
+      } else {
+        newSet.add(placeholderId);
+      }
+      return newSet;
+    });
+  };
+
+  // 退出多选模式
+  const exitMultiSelectMode = () => {
+    setIsMultiSelectMode(false);
+    setSelectedImages(new Set());
+  };
+
+  // 批量删除选中的图片
+  const batchDeleteImages = () => {
+    if (selectedImages.size === 0) return;
+    updateImagePlaceholders(prev => prev.filter(p => !selectedImages.has(p.id)));
+    setSelectedImages(new Set());
+  };
+
+  // 批量下载选中的图片
+  const batchDownloadImages = async () => {
+    if (selectedImages.size === 0) return;
+    const selectedPlaceholders = imagePlaceholdersRef.current.filter(
+      p => selectedImages.has(p.id) && p.status === 'completed'
+    );
+    for (const placeholder of selectedPlaceholders) {
+      const isHQ = placeholder.upscaleStatus === 'completed' && placeholder.displayQuality === 'hq' && placeholder.hqImageUrl;
+      const url = isHQ ? placeholder.hqImageUrl : placeholder.imageUrl;
+      const filename = isHQ ? placeholder.hqFilename : placeholder.filename;
+      await downloadImage(url, filename);
+      // 稍微延迟以避免浏览器阻止多个下载
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+  };
+
+  // 批量高清化选中的图片（自动跳过已高清化的）
+  const batchUpscaleImages = () => {
+    if (selectedImages.size === 0) return;
+    const selectedPlaceholders = imagePlaceholdersRef.current.filter(
+      p => selectedImages.has(p.id) &&
+           p.status === 'completed' &&
+           p.upscaleStatus === 'none' // 只对未高清化的图片执行
+    );
+    for (const placeholder of selectedPlaceholders) {
+      queueUpscale(placeholder.id);
+    }
+  };
+
   // 下载图片
   const downloadImage = async (imageUrl, filename) => {
     try {
@@ -2077,6 +2145,43 @@ const App = () => {
           <div className="images-container" ref={imagesContainerRef}>
           {/* 控制栏 */}
           <div className="images-toolbar">
+            {/* 多选模式下的批量操作按钮 */}
+            {isMultiSelectMode && (
+              <div className="batch-actions">
+                <span className="selected-count">{selectedImages.size} 已选</span>
+                <button
+                  className="batch-action-button download"
+                  onClick={batchDownloadImages}
+                  disabled={selectedImages.size === 0}
+                  title="批量下载"
+                >
+                  批量下载
+                </button>
+                <button
+                  className="batch-action-button upscale"
+                  onClick={batchUpscaleImages}
+                  disabled={selectedImages.size === 0}
+                  title="批量高清化"
+                >
+                  批量高清
+                </button>
+                <button
+                  className="batch-action-button delete"
+                  onClick={batchDeleteImages}
+                  disabled={selectedImages.size === 0}
+                  title="批量删除"
+                >
+                  批量删除
+                </button>
+              </div>
+            )}
+            <button
+              className={`multi-select-button ${isMultiSelectMode ? 'active' : ''}`}
+              onClick={() => isMultiSelectMode ? exitMultiSelectMode() : setIsMultiSelectMode(true)}
+              title={isMultiSelectMode ? '退出多选' : '多选'}
+            >
+              {isMultiSelectMode ? '✓ 完成' : '☑ 多选'}
+            </button>
             <button
               className="view-toggle-button"
               onClick={toggleViewMode}
@@ -2098,10 +2203,19 @@ const App = () => {
                 {imagePlaceholders.map((placeholder) => (
                   <div
                     key={placeholder.id}
-                    className="image-placeholder"
+                    className={`image-placeholder ${isMultiSelectMode && placeholder.status === 'completed' ? 'multi-select-mode' : ''} ${selectedImages.has(placeholder.id) ? 'selected' : ''}`}
                     style={{ '--item-aspect-ratio': placeholder.aspectRatio || 1 }}
                   >
                     <div className={`skeleton ${placeholder.isNew ? 'skeleton-new' : ''} ${placeholder.isRemoving ? 'skeleton-removing' : ''}`}>
+                      {/* 多选模式选中指示器 */}
+                      {isMultiSelectMode && placeholder.status === 'completed' && (
+                        <div
+                          className={`selection-indicator ${selectedImages.has(placeholder.id) ? 'checked' : ''}`}
+                          onClick={() => toggleImageSelection(placeholder.id)}
+                        >
+                          {selectedImages.has(placeholder.id) ? '✓' : ''}
+                        </div>
+                      )}
                       {/* 背景图片 */}
                       {(placeholder.status === 'revealing' || placeholder.status === 'completed') && placeholder.imageUrl && (
                         <img
@@ -2114,22 +2228,37 @@ const App = () => {
                           alt={`Generated ${placeholder.id}`}
                           onClick={() => {
                             if (placeholder.status === 'completed') {
-                              // 根据当前显示的清晰度下载对应版本
-                              const isHQ = placeholder.upscaleStatus === 'completed' && placeholder.displayQuality === 'hq' && placeholder.hqImageUrl;
-                              const url = isHQ ? placeholder.hqImageUrl : placeholder.imageUrl;
-                              const filename = isHQ ? placeholder.hqFilename : placeholder.filename;
-                              downloadImage(url, filename);
+                              if (isMultiSelectMode) {
+                                // 多选模式下点击是选中/取消选中
+                                toggleImageSelection(placeholder.id);
+                              } else {
+                                // 非多选模式下点击是下载
+                                const isHQ = placeholder.upscaleStatus === 'completed' && placeholder.displayQuality === 'hq' && placeholder.hqImageUrl;
+                                const url = isHQ ? placeholder.hqImageUrl : placeholder.imageUrl;
+                                const filename = isHQ ? placeholder.hqFilename : placeholder.filename;
+                                downloadImage(url, filename);
+                              }
                             }
                           }}
                           className={`generated-image ${placeholder.status === 'revealing' || placeholder.status === 'completed' ? 'revealing' : ''} ${placeholder.upscaleStatus === 'upscaling' ? 'upscaling-blur' : ''}`}
                           style={{ pointerEvents: placeholder.status === 'completed' ? 'auto' : 'none' }}
-                          draggable={placeholder.status === 'completed' && placeholder.seed !== null}
+                          draggable={placeholder.status === 'completed' && placeholder.seed !== null && !isMultiSelectMode}
                           onDragStart={(e) => {
-                            if (placeholder.status === 'completed' && placeholder.seed !== null) {
+                            if (placeholder.status === 'completed' && placeholder.seed !== null && !isMultiSelectMode) {
                               e.dataTransfer.setData('seed', placeholder.seed.toString());
                             }
                           }}
                         />
+                      )}
+                      {/* 删除按钮 - 仅在completed状态且非upscaling时显示，悬停可见 */}
+                      {placeholder.status === 'completed' && placeholder.upscaleStatus !== 'upscaling' && !isMultiSelectMode && (
+                        <button
+                          className="delete-image-button"
+                          onClick={() => deleteImage(placeholder.id)}
+                          title="删除图片"
+                        >
+                          ×
+                        </button>
                       )}
                       {/* 取消按钮 - 仅在queue状态且非loading时显示 */}
                       {placeholder.status === 'queue' && !placeholder.isLoading && (
