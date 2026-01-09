@@ -10,8 +10,8 @@
   --theme-primary-dark: hsl(270, 65%, 54%);
   --theme-primary-light: hsl(270, 75%, 75%);
   --theme-accent: hsl(300, 75%, 65%);
-  --theme-bg: hsl(270, 60%, 5%);
-  --theme-bg-card: hsl(270, 50%, 10%);
+  --theme-bg: hsl(270, 25%, 12%);
+  --theme-bg-card: hsl(270, 20%, 16%);
   --theme-border: hsla(270, 70%, 65%, 0.3);
   --theme-border-hover: hsl(270, 70%, 65%);
   --theme-text: hsl(270, 70%, 92%);
@@ -23,6 +23,86 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* 顶部连接状态通知 */
+.connection-notification {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  font-size: 0.9rem;
+  z-index: 9999;
+  transform: translateY(-100%);
+  transition: transform 0.3s ease;
+}
+
+.connection-notification.show {
+  transform: translateY(0);
+}
+
+.connection-notification.disconnected {
+  background: rgba(220, 53, 69, 0.95);
+  color: white;
+}
+
+.connection-notification.connected {
+  background: rgba(25, 135, 84, 0.95);
+  color: white;
+}
+
+.connection-notification.checking {
+  background: rgba(108, 117, 125, 0.95);
+  color: white;
+}
+
+/* 强调动画 */
+.connection-notification.emphasis {
+  animation: notificationEmphasis 0.6s ease;
+}
+
+@keyframes notificationEmphasis {
+  0%, 100% { opacity: 1; }
+  25% { opacity: 0.5; }
+  50% { opacity: 1; }
+  75% { opacity: 0.5; }
+}
+
+.notification-message {
+  flex: 0 1 auto;
+}
+
+.retry-link {
+  background: none;
+  border: none;
+  color: var(--theme-primary-light);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0;
+}
+
+.retry-link:hover {
+  color: white;
+}
+
+/* 省略号加载动画 */
+.loading-dots::after {
+  content: '';
+  animation: dots 0.4s steps(4, end) infinite;
+}
+
+@keyframes dots {
+  0% { content: ''; }
+  25% { content: '.'; }
+  50% { content: '..'; }
+  75% { content: '...'; }
+  100% { content: ''; }
 }
 
 .app {
@@ -215,6 +295,16 @@ body {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
+/* 设置面板遮罩层 */
+.settings-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+}
+
 /* 设置面板 */
 .settings-panel {
   position: absolute;
@@ -270,6 +360,11 @@ body {
   cursor: pointer;
   border-radius: 8px;
   transition: background 0.2s;
+  margin-top: 8px;
+}
+
+.settings-section-header:first-child {
+  margin-top: 0;
 }
 
 .settings-section-header:hover {
@@ -277,8 +372,14 @@ body {
 }
 
 .settings-arrow {
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   opacity: 0.7;
+  display: inline-block;
+  transition: transform 0.2s ease;
+}
+
+.settings-arrow.expanded {
+  transform: rotate(90deg);
 }
 
 /* LoRA管理列表 */
@@ -287,8 +388,27 @@ body {
   overflow-y: auto;
   padding: 8px;
   margin-top: 4px;
-  background: hsla(var(--theme-hue), 30%, 10%, 0.5);
+  background: hsla(var(--theme-hue), 30%, 10%, 0.15);
   border-radius: 8px;
+}
+
+/* 自定义滚动条 */
+.lora-manager-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.lora-manager-list::-webkit-scrollbar-track {
+  background: hsla(var(--theme-hue), 30%, 20%, 0.3);
+  border-radius: 4px;
+}
+
+.lora-manager-list::-webkit-scrollbar-thumb {
+  background: var(--theme-primary);
+  border-radius: 4px;
+}
+
+.lora-manager-list::-webkit-scrollbar-thumb:hover {
+  background: var(--theme-primary-light);
 }
 
 .lora-manager-empty {
@@ -321,10 +441,11 @@ body {
 }
 
 .lora-manager-checkbox input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   cursor: pointer;
   flex-shrink: 0;
+  accent-color: var(--theme-primary);
 }
 
 .lora-manager-name {
@@ -364,7 +485,7 @@ body {
 /* 主题设置内容 */
 .theme-settings-content {
   padding: 12px;
-  background: hsla(var(--theme-hue), 30%, 10%, 0.5);
+  background: hsla(var(--theme-hue), 30%, 10%, 0.15);
   border-radius: 8px;
   margin-top: 4px;
 }
@@ -372,25 +493,33 @@ body {
 /* LoRA下拉选择器 */
 .lora-select {
   width: 100%;
-  padding: 10px 12px;
+  padding: 10px 36px 10px 12px;
   background: var(--theme-bg);
   border: 2px solid var(--theme-border);
   border-radius: 8px;
   color: var(--theme-text);
   font-size: 0.9rem;
   cursor: pointer;
-  transition: border-color 0.3s;
+  transition: all 0.3s ease;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
 }
 
 .lora-select:hover,
 .lora-select:focus {
-  border-color: var(--theme-border-hover);
+  border-color: var(--theme-primary);
+  box-shadow: 0 0 0 3px hsla(var(--theme-hue), 70%, 65%, 0.2);
   outline: none;
 }
 
 .lora-select option {
   background: var(--theme-bg-card);
   color: var(--theme-text);
+  padding: 8px;
 }
 
 /* 宽屏布局 */
@@ -398,7 +527,7 @@ body {
   .container {
     display: grid;
     grid-template-columns: 500px 1fr;
-    gap: 30px;
+    gap: 24px;
     align-items: start;
   }
 
@@ -412,7 +541,7 @@ body {
 
   .images-container {
     position: sticky;
-    top: 20px;
+    top: 0;
     max-height: calc(100vh - 40px);
     overflow-y: auto;
     scroll-behavior: smooth; /* 平滑滚动 */
@@ -430,12 +559,85 @@ body {
   font-size: 2.5rem;
   font-weight: 700;
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: 24px;
   background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-accent) 50%, var(--theme-primary-light) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   text-shadow: 0 0 30px var(--theme-border);
+}
+
+/* 亮色模式适配 */
+.light-mode .title {
+  background: linear-gradient(135deg, hsl(0, 0%, 35%) 0%, hsl(0, 0%, 45%) 50%, hsl(0, 0%, 40%) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* 浅色模式下按钮文字变深色 */
+.light-mode .generate-all-button,
+.light-mode .generate-button {
+  color: hsl(0, 0%, 20%);
+}
+
+.light-mode .settings-button {
+  background: var(--theme-primary-dark);
+}
+
+/* 亮色模式下提示词输入框样式 */
+.light-mode .textarea,
+.light-mode .input {
+  background: hsla(var(--theme-hue), 20%, 88%, 0.95);
+  color: hsl(0, 0%, 25%);
+  border-color: hsla(var(--theme-hue), 30%, 70%, 0.5);
+}
+
+.light-mode .textarea:focus,
+.light-mode .input:focus {
+  background: hsla(0, 0%, 100%, 0.98);
+  color: hsl(0, 0%, 20%);
+  border-color: var(--theme-primary);
+}
+
+.light-mode .textarea::placeholder,
+.light-mode .input::placeholder {
+  color: hsla(0, 0%, 30%, 0.6);
+}
+
+/* 浅色模式下高级设置中的按钮元素降低透明度 */
+.light-mode .radio-label {
+  background: hsla(calc(var(--theme-hue) * 1), calc(var(--theme-bg-saturation) * 1%), calc(var(--theme-bg-lightness) * 0.625%), 0.2);
+}
+
+.light-mode .queue-control-item {
+  background: hsla(calc(var(--theme-hue) * 1), calc(var(--theme-bg-saturation) * 1%), calc(var(--theme-bg-lightness) * 0.625%), 0.2);
+}
+
+.light-mode .lora-options {
+  background: hsla(calc(var(--theme-hue) * 1), calc(var(--theme-bg-saturation) * 1%), calc(var(--theme-bg-lightness) * 0.5%), 0.2);
+}
+
+/* 浅色模式下发送按钮箭头变深灰色 */
+.light-mode .send-prompt-button {
+  color: rgba(60, 60, 60, 0.6);
+}
+
+.light-mode .send-prompt-button:hover:not(:disabled) {
+  color: rgba(30, 30, 30, 1);
+}
+
+/* 浅色模式下目标分辨率文字变深色 */
+.light-mode .resolution-display {
+  color: hsla(0, 0%, 30%, 0.7);
+}
+
+/* 浅色模式下选中状态不变白 */
+.light-mode .radio-label input[type='radio']:checked + span {
+  color: var(--theme-text);
+}
+
+.light-mode .queue-control-item input[type='checkbox']:checked ~ .queue-control-label {
+  color: var(--theme-text);
 }
 
 .form {
@@ -615,7 +817,7 @@ body {
 
 .label {
   display: block;
-  font-size: 1rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--theme-text);
   margin-bottom: 12px;
@@ -859,9 +1061,86 @@ body {
 .advanced-settings-content {
   margin-top: 16px;
   padding: 16px;
-  background: hsla(calc(var(--theme-hue) * 1), calc(var(--theme-bg-saturation) * 1%), calc(var(--theme-bg-lightness) * 0.625%), 0.5);
+  background: hsla(calc(var(--theme-hue) * 1), calc(var(--theme-bg-saturation) * 1%), calc(var(--theme-bg-lightness) * 0.625%), 0.18);
   border: 1px solid var(--theme-border);
   border-radius: 8px;
+}
+
+/* 设置分组 */
+.settings-group {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.settings-group:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* 可折叠设置分组 */
+.settings-group-collapsible {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.settings-group-collapsible:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.settings-group-summary {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  margin-bottom: 12px;
+}
+
+.settings-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-group-summary::before {
+  content: '▶';
+  font-size: 0.7rem;
+  color: var(--theme-primary);
+  transition: transform 0.3s ease;
+}
+
+.settings-group-collapsible[open] .settings-group-summary::before {
+  transform: rotate(90deg);
+}
+
+.settings-group-summary:hover {
+  opacity: 0.8;
+}
+
+.settings-group-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--theme-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+/* 浅色模式下高级设置分区标题变深色 */
+.light-mode .settings-group-title {
+  color: hsl(0, 0%, 35%);
+}
+
+.light-mode .settings-group-summary::before {
+  color: hsl(0, 0%, 35%);
+}
+
+.settings-group-content {
+  margin-top: 12px;
 }
 
 /* 队列控制设置 */
@@ -1311,6 +1590,7 @@ body {
   border: 2px dashed var(--theme-border);
   border-radius: 16px;
   padding: 40px;
+  margin-top: 36px;
 }
 
 .empty-icon {
@@ -1337,7 +1617,31 @@ body {
   text-align: center;
 }
 
+/* 右侧图片区域 */
+.images-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.images-toolbar {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0;
+  z-index: 10;
+}
+
+.images-toolbar .view-toggle-button {
+  width: 32px;
+  height: 32px;
+  font-size: 0.9rem;
+}
+
 .images-container {
+  position: relative;
   background: var(--theme-bg-card);
   border: 1px solid var(--theme-border);
   border-radius: 16px;

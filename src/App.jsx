@@ -49,6 +49,13 @@ const App = () => {
   const [generatedImageGroups, setGeneratedImageGroups] = useState([]); // 按提示词分组的图像
   const [imagePlaceholders, setImagePlaceholders] = useState([]); // 骨架占位
   const [error, setError] = useState('');
+
+  // ComfyUI连接状态
+  const [connectionStatus, setConnectionStatus] = useState('checking'); // 'checking' | 'connected' | 'disconnected'
+  const [connectionMessage, setConnectionMessage] = useState('');
+  const [showNotification, setShowNotification] = useState(false);
+  const [notificationEmphasis, setNotificationEmphasis] = useState(false);
+
   const [themeHue, setThemeHue] = useState(() => loadFromStorage('corineGen_themeHue', 270));
   const [themeBgSaturation, setThemeBgSaturation] = useState(() => loadFromStorage('corineGen_themeBgSaturation', 60));
   const [themeBgLightness, setThemeBgLightness] = useState(() => loadFromStorage('corineGen_themeBgLightness', 8));
@@ -78,6 +85,7 @@ const App = () => {
   const [showLoraManager, setShowLoraManager] = useState(false); // LoRA管理列表展开状态
 
   const firstSeedRef = useRef(null);
+  const heartbeatRef = useRef(null); // 心跳检测定时器
 
   // 计算下一个提示词ID
   const savedPromptsForId = loadFromStorage('corineGen_prompts', [{ id: 1 }]);
@@ -229,6 +237,69 @@ const App = () => {
       }
     };
     fetchAvailableLoras();
+  }, []);
+
+  // 启动心跳检测
+  const startHeartbeat = () => {
+    if (heartbeatRef.current) return;
+    heartbeatRef.current = setInterval(() => {
+      checkConnection(true);
+    }, 5000);
+  };
+
+  // 停止心跳检测
+  const stopHeartbeat = () => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+  };
+
+  // 触发连接提示强调动画
+  const triggerConnectionEmphasis = () => {
+    setShowNotification(true);
+    setNotificationEmphasis(true);
+    setTimeout(() => setNotificationEmphasis(false), 600);
+  };
+
+  // 检测ComfyUI连接状态
+  const checkConnection = async (silent = false) => {
+    if (!silent) setConnectionStatus('checking');
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+      const response = await fetch(`${COMFYUI_API}/system_stats`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        setConnectionStatus('connected');
+        if (!silent) {
+          setConnectionMessage(`ComfyUI 正在 127.0.0.1:8188 运行，一切就绪`);
+          setShowNotification(true);
+          setTimeout(() => setShowNotification(false), 3000);
+        }
+        startHeartbeat();
+      } else {
+        throw new Error('响应异常');
+      }
+    } catch (error) {
+      stopHeartbeat();
+      setConnectionStatus('disconnected');
+      if (error.name === 'AbortError') {
+        setConnectionMessage('连接超时，请确保 ComfyUI 已启动');
+      } else {
+        setConnectionMessage('无法连接到 ComfyUI，请确保 ComfyUI 已启动');
+      }
+      setShowNotification(true);
+    }
+  };
+
+  // 页面加载时检测连接
+  useEffect(() => {
+    checkConnection();
   }, []);
 
   // 切换视图模式
@@ -565,6 +636,12 @@ const App = () => {
 
   // 添加到队列并开始生成
   const queueGeneration = (promptId) => {
+    // 检查连接状态
+    if (connectionStatus !== 'connected') {
+      triggerConnectionEmphasis();
+      return;
+    }
+
     const prompt = prompts.find(p => p.id === promptId);
     if (!prompt || !prompt.text.trim()) {
       setError('请输入提示词');
@@ -625,6 +702,12 @@ const App = () => {
 
   // 生成所有提示词 - 简单触发每个提示词的→按钮
   const generateAll = () => {
+    // 检查连接状态
+    if (connectionStatus !== 'connected') {
+      triggerConnectionEmphasis();
+      return;
+    }
+
     const validPrompts = prompts.filter(p => p.text.trim());
 
     if (validPrompts.length === 0) {
@@ -1364,7 +1447,7 @@ const App = () => {
   };
 
   return (
-    <div className="app" style={{
+    <div className={`app ${themeBgLightness > 40 ? 'light-mode' : ''}`} style={{
       '--theme-hue': themeHue,
       '--theme-bg-saturation': themeBgSaturation,
       '--theme-bg-lightness': themeBgLightness,
@@ -1376,18 +1459,25 @@ const App = () => {
       '--theme-bg-card': `hsl(${themeHue}, ${themeBgSaturation - 10}%, ${themeBgLightness + 2}%)`,
       '--theme-border': `hsla(${themeHue}, 70%, 65%, 0.3)`,
       '--theme-border-hover': `hsl(${themeHue}, 70%, 65%)`,
-      '--theme-text': `hsl(${themeHue}, 70%, 92%)`,
+      '--theme-text': themeBgLightness > 40 ? `hsl(${themeHue}, 50%, 15%)` : `hsl(${themeHue}, 70%, 92%)`,
     }}>
-      <div className="container">
-        {/* 视图和设置按钮 */}
-        <div className="theme-button-container">
-          <button
-            className="view-toggle-button"
-            onClick={toggleViewMode}
-            title={`当前视图: ${viewMode === 'small' ? '小' : viewMode === 'medium' ? '中' : '大'}`}
-          >
-            {getViewIcon()}
+      {/* 顶部连接状态通知 */}
+      <div className={`connection-notification ${showNotification ? 'show' : ''} ${connectionStatus} ${notificationEmphasis ? 'emphasis' : ''}`}>
+        <span className="notification-message">
+          {connectionStatus === 'checking' ? (
+            <>正在尝试重连<span className="loading-dots"></span></>
+          ) : connectionMessage}
+        </span>
+        {connectionStatus === 'disconnected' && (
+          <button className="retry-link" onClick={() => checkConnection()}>
+            重试连接
           </button>
+        )}
+      </div>
+
+      <div className="container">
+        {/* 设置按钮 */}
+        <div className="theme-button-container">
           <button
             className="settings-button"
             onClick={() => setShowSettingsPanel(!showSettingsPanel)}
@@ -1396,12 +1486,10 @@ const App = () => {
             ⚙️
           </button>
           {showSettingsPanel && (
-            <div className="settings-panel">
-              <div className="settings-header">
-                <span>设置</span>
-                <button className="settings-close" onClick={() => setShowSettingsPanel(false)}>×</button>
-              </div>
-              <div className="settings-content">
+            <>
+              <div className="settings-overlay" onClick={() => setShowSettingsPanel(false)} />
+              <div className="settings-panel">
+                <div className="settings-content">
                 {/* 主题区域 */}
                 <div className="settings-section">
                   <button
@@ -1409,7 +1497,7 @@ const App = () => {
                     onClick={() => setShowThemeSection(!showThemeSection)}
                   >
                     <span>主题</span>
-                    <span className="settings-arrow">{showThemeSection ? '▼' : '▶'}</span>
+                    <span className={`settings-arrow ${showThemeSection ? 'expanded' : ''}`}>▶</span>
                   </button>
                   {showThemeSection && (
                     <div className="theme-settings-content">
@@ -1459,12 +1547,14 @@ const App = () => {
                     onClick={() => setShowLoraManager(!showLoraManager)}
                   >
                     <span>LoRA 管理</span>
-                    <span className="settings-arrow">{showLoraManager ? '▼' : '▶'}</span>
+                    <span className={`settings-arrow ${showLoraManager ? 'expanded' : ''}`}>▶</span>
                   </button>
                   {showLoraManager && (
                     <div className="lora-manager-list">
-                      {availableLoras.length === 0 ? (
-                        <div className="lora-manager-empty">加载中...</div>
+                      {connectionStatus !== 'connected' ? (
+                        <div className="lora-manager-empty">未连接 ComfyUI</div>
+                      ) : availableLoras.length === 0 ? (
+                        <div className="lora-manager-empty">暂无可用 LoRA</div>
                       ) : (
                         availableLoras.map((lora) => {
                           const loraConfig = enabledLoras.find(l => l.name === lora);
@@ -1518,12 +1608,13 @@ const App = () => {
                     </div>
                   )}
                 </div>
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
 
-        <h1 className="title">✨ CorineGen 图像生成器</h1>
+        <h1 className="title">CorineGen</h1>
 
         <div className="form">
           {/* 提示词列表 */}
@@ -1613,75 +1704,89 @@ const App = () => {
           <details className="advanced-settings">
             <summary className="advanced-settings-summary">高级设置</summary>
             <div className="advanced-settings-content">
-              {/* 批次数量 */}
-              <div className="form-group">
-                <label className="label">批次数量</label>
-                <div className="radio-group">
-                  {[1, 2, 4, 8, 16].map((size) => (
-                    <label key={size} className="radio-label">
+
+              {/* 生成设置分组 */}
+              <details className="settings-group-collapsible" open>
+                <summary className="settings-group-summary">
+                  <span className="settings-group-title">生成设置</span>
+                </summary>
+                <div className="settings-group-content">
+
+                {/* 批次数量 */}
+                <div className="form-group">
+                  <label className="label">批次数量</label>
+                  <div className="radio-group">
+                    {[1, 2, 4, 8, 16].map((size) => (
+                      <label key={size} className="radio-label">
+                        <input
+                          type="radio"
+                          name="batchSize"
+                          value={size}
+                          checked={batchSize === size}
+                          onChange={() => setBatchSize(size)}
+                        />
+                        <span>{size}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 批次方法 */}
+                <div className="form-group">
+                  <label className="label">批次方法</label>
+                  <div className="radio-group">
+                    <label className="radio-label">
                       <input
                         type="radio"
-                        name="batchSize"
-                        value={size}
-                        checked={batchSize === size}
-                        onChange={() => setBatchSize(size)}
+                        name="batchMethod"
+                        value="batch"
+                        checked={batchMethod === 'batch'}
+                        onChange={() => setBatchMethod('batch')}
                       />
-                      <span>{size}</span>
+                      <span>一次性执行</span>
                     </label>
-                  ))}
+                    <label className="radio-label">
+                      <input
+                        type="radio"
+                        name="batchMethod"
+                        value="loop"
+                        checked={batchMethod === 'loop'}
+                        onChange={() => setBatchMethod('loop')}
+                      />
+                      <span>工作流循环执行</span>
+                    </label>
+                  </div>
                 </div>
-              </div>
 
-              {/* 批次方法 */}
-              <div className="form-group">
-                <label className="label">批次方法</label>
-                <div className="radio-group">
-                  <label className="radio-label">
-                    <input
-                      type="radio"
-                      name="batchMethod"
-                      value="batch"
-                      checked={batchMethod === 'batch'}
-                      onChange={() => setBatchMethod('batch')}
-                    />
-                    <span>一次性执行</span>
-                  </label>
-                  <label className="radio-label">
-                    <input
-                      type="radio"
-                      name="batchMethod"
-                      value="loop"
-                      checked={batchMethod === 'loop'}
-                      onChange={() => setBatchMethod('loop')}
-                    />
-                    <span>工作流循环执行</span>
-                  </label>
+                {/* Steps滑块 */}
+                <div className="form-group">
+                  <label className="label">采样步数 (Steps): {steps}</label>
+                  <input
+                    type="range"
+                    min="8"
+                    max="16"
+                    step="1"
+                    value={steps}
+                    onChange={(e) => setSteps(parseInt(e.target.value))}
+                    className="slider"
+                  />
                 </div>
-              </div>
+                </div>
+              </details>
 
-              {/* Steps滑块 */}
-              <div className="form-group">
-                <label className="label">采样步数 (Steps): {steps}</label>
-                <input
-                  type="range"
-                  min="8"
-                  max="16"
-                  step="1"
-                  value={steps}
-                  onChange={(e) => setSteps(parseInt(e.target.value))}
-                  className="slider"
-                />
-              </div>
-
-              {/* LoRA 设置 */}
-              <div className="form-group lora-settings">
-                <label className="checkbox-label">
+              {/* LoRA 设置分组 */}
+              <details className="settings-group-collapsible" open>
+                <summary className="settings-group-summary">
+                  <span className="settings-group-title">LoRA 设置</span>
+                </summary>
+                <div className="settings-group-content">
+                <label className="queue-control-item">
                   <input
                     type="checkbox"
                     checked={loraEnabled}
                     onChange={(e) => setLoraEnabled(e.target.checked)}
                   />
-                  <span>启用 LoRA</span>
+                  <span className="queue-control-label">启用 LoRA</span>
                 </label>
 
                 {loraEnabled && (
@@ -1739,10 +1844,18 @@ const App = () => {
                     </div>
                   </div>
                 )}
-              </div>
+                </div>
+              </details>
 
-              {/* 超分倍率滑块 */}
-              <div className="form-group">
+              {/* 图像设置分组 */}
+              <details className="settings-group-collapsible" open>
+                <summary className="settings-group-summary">
+                  <span className="settings-group-title">图像设置</span>
+                </summary>
+                <div className="settings-group-content">
+
+                {/* 超分倍率滑块 */}
+                <div className="form-group">
                 <label className="label">超分倍率: {resolutionScale.toFixed(1)}x</label>
                 <input
                   type="range"
@@ -1824,9 +1937,18 @@ const App = () => {
                   </label>
                 </div>
               </div>
+              </div>
+              </details>
 
-              {/* 种子模式 */}
-              <div className="form-group">
+              {/* 种子设置分组 */}
+              <details className="settings-group-collapsible" open>
+                <summary className="settings-group-summary">
+                  <span className="settings-group-title">种子设置</span>
+                </summary>
+                <div className="settings-group-content">
+
+                {/* 种子模式 */}
+                <div className="form-group">
                 <label className="label">种子模式</label>
                 <div className="radio-group">
                   <label className="radio-label">
@@ -1919,6 +2041,8 @@ const App = () => {
                   />
                 </div>
               )}
+              </div>
+              </details>
             </div>
           </details>
 
@@ -1947,8 +2071,20 @@ const App = () => {
           {error && <div className="error">{error}</div>}
         </div>
 
-        {/* 图像展示区域 - 骨架占位图 */}
-        <div className="images-container" ref={imagesContainerRef}>
+        {/* 右侧图片区域 */}
+        <div className="images-section">
+          {/* 图像展示区域 - 骨架占位图 */}
+          <div className="images-container" ref={imagesContainerRef}>
+          {/* 控制栏 */}
+          <div className="images-toolbar">
+            <button
+              className="view-toggle-button"
+              onClick={toggleViewMode}
+              title={`当前视图: ${viewMode === 'small' ? '小' : viewMode === 'medium' ? '中' : '大'}`}
+            >
+              {getViewIcon()}
+            </button>
+          </div>
           {imagePlaceholders.length > 0 ? (
             <>
               <Masonry
@@ -2092,6 +2228,7 @@ const App = () => {
               <p className="empty-text">生成的图像将在这里显示</p>
             </div>
           )}
+        </div>
         </div>
       </div>
     </div>
