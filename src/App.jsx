@@ -1863,26 +1863,28 @@ const App = () => {
                   <div className="lora-options">
                     <div className="lora-input-group">
                       <label className="label">选择 LoRA</label>
-                      <select
-                        className="select lora-select"
-                        value={loraName}
-                        onChange={(e) => setLoraName(e.target.value)}
-                      >
-                        {enabledLoras.length === 0 ? (
-                          <option value="">请先在设置中启用 LoRA</option>
-                        ) : (
-                          enabledLoras.map((lora) => {
-                            // 兼容旧格式
-                            const loraName = typeof lora === 'string' ? lora : lora.name;
+                      {enabledLoras.length === 0 ? (
+                        <p className="lora-empty-hint">请先在设置中启用 LoRA</p>
+                      ) : (
+                        <div className="radio-group lora-radio-group">
+                          {enabledLoras.map((lora) => {
+                            const loraValue = typeof lora === 'string' ? lora : lora.name;
                             const loraDisplay = typeof lora === 'string' ? lora : (lora.displayName || lora.name);
                             return (
-                              <option key={loraName} value={loraName}>
-                                {loraDisplay}
-                              </option>
+                              <label key={loraValue} className="radio-label">
+                                <input
+                                  type="radio"
+                                  name="lora-selection"
+                                  value={loraValue}
+                                  checked={loraName === loraValue}
+                                  onChange={(e) => setLoraName(e.target.value)}
+                                />
+                                <span>{loraDisplay}</span>
+                              </label>
                             );
-                          })
-                        )}
-                      </select>
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     <div className="lora-sliders">

@@ -490,36 +490,25 @@ body {
   margin-top: 4px;
 }
 
-/* LoRA下拉选择器 */
-.lora-select {
-  width: 100%;
-  padding: 10px 36px 10px 12px;
-  background: var(--theme-bg);
-  border: 2px solid var(--theme-border);
-  border-radius: 8px;
-  color: var(--theme-text);
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
+/* LoRA单选按钮组 */
+.lora-radio-group {
+  margin-top: 8px;
 }
 
-.lora-select:hover,
-.lora-select:focus {
-  border-color: var(--theme-primary);
-  box-shadow: 0 0 0 3px hsla(var(--theme-hue), 70%, 65%, 0.2);
-  outline: none;
+.lora-radio-group .radio-label {
+  padding: 8px 14px;
+  font-size: 0.85rem;
 }
 
-.lora-select option {
-  background: var(--theme-bg-card);
+.lora-radio-group .radio-label span {
+  font-size: 0.85rem;
+}
+
+.lora-empty-hint {
   color: var(--theme-text);
-  padding: 8px;
+  opacity: 0.6;
+  font-size: 0.85rem;
+  margin-top: 8px;
 }
 
 /* 宽屏布局 */
