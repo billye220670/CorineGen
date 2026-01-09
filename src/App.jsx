@@ -52,10 +52,31 @@ const App = () => {
   const [themeHue, setThemeHue] = useState(() => loadFromStorage('corineGen_themeHue', 270));
   const [themeBgSaturation, setThemeBgSaturation] = useState(() => loadFromStorage('corineGen_themeBgSaturation', 60));
   const [themeBgLightness, setThemeBgLightness] = useState(() => loadFromStorage('corineGen_themeBgLightness', 8));
-  const [showThemePicker, setShowThemePicker] = useState(false); // 显示颜色选择器
   const [viewMode, setViewMode] = useState(() => loadFromStorage('corineGen_viewMode', 'medium')); // small, medium, large
   const [prioritizeGeneration, setPrioritizeGeneration] = useState(() => loadFromStorage('corineGen_prioritizeGeneration', false)); // 生图队列优先
   const [autoUpscaleAfterGen, setAutoUpscaleAfterGen] = useState(() => loadFromStorage('corineGen_autoUpscaleAfterGen', false)); // 生图后自动高清化
+
+  // LoRA 设置
+  const [loraEnabled, setLoraEnabled] = useState(() => loadFromStorage('corineGen_loraEnabled', false));
+  const [loraName, setLoraName] = useState(() => loadFromStorage('corineGen_loraName', 'YJY\\Lora_YJY_000002750.safetensors'));
+  const [loraStrengthModel, setLoraStrengthModel] = useState(() => loadFromStorage('corineGen_loraStrengthModel', 1));
+  const [loraStrengthClip, setLoraStrengthClip] = useState(() => loadFromStorage('corineGen_loraStrengthClip', 1));
+
+  // LoRA 管理
+  const [availableLoras, setAvailableLoras] = useState([]); // 从ComfyUI获取的所有LoRA
+  // enabledLoras结构: [{ name: 'xxx.safetensors', displayName: '自定义名', triggerWord: '触发词' }, ...]
+  const [enabledLoras, setEnabledLoras] = useState(() => {
+    const saved = loadFromStorage('corineGen_enabledLoras', []);
+    // 兼容旧格式：如果是字符串数组，转换为对象数组
+    if (saved.length > 0 && typeof saved[0] === 'string') {
+      return saved.map(name => ({ name, displayName: '', triggerWord: '' }));
+    }
+    return saved;
+  });
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false); // 设置面板显示状态
+  const [showThemeSection, setShowThemeSection] = useState(false); // 主题区域展开状态
+  const [showLoraManager, setShowLoraManager] = useState(false); // LoRA管理列表展开状态
+
   const firstSeedRef = useRef(null);
 
   // 计算下一个提示词ID
@@ -172,6 +193,43 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('corineGen_autoUpscaleAfterGen', JSON.stringify(autoUpscaleAfterGen));
   }, [autoUpscaleAfterGen]);
+
+  // LoRA 设置保存
+  useEffect(() => {
+    localStorage.setItem('corineGen_loraEnabled', JSON.stringify(loraEnabled));
+  }, [loraEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_loraName', JSON.stringify(loraName));
+  }, [loraName]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_loraStrengthModel', JSON.stringify(loraStrengthModel));
+  }, [loraStrengthModel]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_loraStrengthClip', JSON.stringify(loraStrengthClip));
+  }, [loraStrengthClip]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_enabledLoras', JSON.stringify(enabledLoras));
+  }, [enabledLoras]);
+
+  // 获取可用的LoRA列表
+  useEffect(() => {
+    const fetchAvailableLoras = async () => {
+      try {
+        const response = await fetch(`${COMFYUI_API}/object_info/LoraLoader`);
+        const data = await response.json();
+        if (data.LoraLoader?.input?.required?.lora_name?.[0]) {
+          setAvailableLoras(data.LoraLoader.input.required.lora_name[0]);
+        }
+      } catch (error) {
+        console.error('获取LoRA列表失败:', error);
+      }
+    };
+    fetchAvailableLoras();
+  }, []);
 
   // 切换视图模式
   const toggleViewMode = () => {
@@ -343,10 +401,14 @@ const App = () => {
 
     const seed = getSeed();
 
-    // 处理prompt：如果缺少yjy触发词，自动添加
-    let processedPrompt = promptText || '超高清画质。';
-    if (!processedPrompt.toLowerCase().includes('yjy')) {
-      processedPrompt = 'yjy，中国女孩，' + processedPrompt;
+    let processedPrompt = promptText || '';
+
+    // 如果启用了LoRA，检查是否有触发词需要添加
+    if (loraEnabled && loraName) {
+      const currentLoraConfig = enabledLoras.find(l => l.name === loraName);
+      if (currentLoraConfig?.triggerWord) {
+        processedPrompt = `${currentLoraConfig.triggerWord}, ${processedPrompt}`;
+      }
     }
 
     // 在固定种子模式下，添加唯一标识符来禁用ComfyUI的执行缓存
@@ -379,6 +441,17 @@ const App = () => {
     // 设置唯一的文件名前缀，避免固定种子模式下文件名重复
     if (uniqueId) {
       workflow['24'].inputs.filename_prefix = `Corine_${uniqueId}_`;
+    }
+
+    // LoRA 设置
+    if (loraEnabled && loraName) {
+      workflow['36'].inputs.lora_name = loraName;
+      workflow['36'].inputs.strength_model = loraStrengthModel;
+      workflow['36'].inputs.strength_clip = loraStrengthClip;
+    } else {
+      // 禁用 LoRA：将权重设为 0
+      workflow['36'].inputs.strength_model = 0;
+      workflow['36'].inputs.strength_clip = 0;
     }
 
     return { workflow, seed };
@@ -1306,7 +1379,7 @@ const App = () => {
       '--theme-text': `hsl(${themeHue}, 70%, 92%)`,
     }}>
       <div className="container">
-        {/* 视图和主题按钮 */}
+        {/* 视图和设置按钮 */}
         <div className="theme-button-container">
           <button
             className="view-toggle-button"
@@ -1316,51 +1389,135 @@ const App = () => {
             {getViewIcon()}
           </button>
           <button
-            className="theme-button"
-            onClick={() => setShowThemePicker(!showThemePicker)}
-            title="更改主题颜色"
+            className="settings-button"
+            onClick={() => setShowSettingsPanel(!showSettingsPanel)}
+            title="设置"
           >
-            🎨
+            ⚙️
           </button>
-          {showThemePicker && (
-            <div className="theme-picker">
-              <label className="theme-picker-label">主题色相</label>
-              <input
-                type="range"
-                min="0"
-                max="360"
-                value={themeHue}
-                onChange={(e) => setThemeHue(parseInt(e.target.value))}
-                className="theme-slider"
-              />
+          {showSettingsPanel && (
+            <div className="settings-panel">
+              <div className="settings-header">
+                <span>设置</span>
+                <button className="settings-close" onClick={() => setShowSettingsPanel(false)}>×</button>
+              </div>
+              <div className="settings-content">
+                {/* 主题区域 */}
+                <div className="settings-section">
+                  <button
+                    className="settings-section-header"
+                    onClick={() => setShowThemeSection(!showThemeSection)}
+                  >
+                    <span>主题</span>
+                    <span className="settings-arrow">{showThemeSection ? '▼' : '▶'}</span>
+                  </button>
+                  {showThemeSection && (
+                    <div className="theme-settings-content">
+                      <label className="theme-picker-label">主题色相</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="360"
+                        value={themeHue}
+                        onChange={(e) => setThemeHue(parseInt(e.target.value))}
+                        className="theme-slider"
+                      />
+                      <label className="theme-picker-label">背景饱和度</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={themeBgSaturation}
+                        onChange={(e) => setThemeBgSaturation(parseInt(e.target.value))}
+                        className="theme-saturation-slider"
+                      />
+                      <label className="theme-picker-label">背景亮度</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="80"
+                        value={themeBgLightness}
+                        onChange={(e) => setThemeBgLightness(parseInt(e.target.value))}
+                        className="theme-lightness-slider"
+                      />
+                      <div className="theme-presets">
+                        <button onClick={() => setThemeHue(270)} className="theme-preset" style={{ background: 'hsl(270, 70%, 65%)' }}>紫</button>
+                        <button onClick={() => setThemeHue(0)} className="theme-preset" style={{ background: 'hsl(0, 70%, 65%)' }}>红</button>
+                        <button onClick={() => setThemeHue(120)} className="theme-preset" style={{ background: 'hsl(120, 70%, 65%)' }}>绿</button>
+                        <button onClick={() => setThemeHue(200)} className="theme-preset" style={{ background: 'hsl(200, 70%, 65%)' }}>蓝</button>
+                        <button onClick={() => setThemeHue(40)} className="theme-preset" style={{ background: 'hsl(40, 70%, 65%)' }}>金</button>
+                        <button onClick={() => setThemeHue(300)} className="theme-preset" style={{ background: 'hsl(300, 70%, 65%)' }}>粉</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
-              <label className="theme-picker-label" style={{ marginTop: '12px' }}>背景饱和度</label>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={themeBgSaturation}
-                onChange={(e) => setThemeBgSaturation(parseInt(e.target.value))}
-                className="theme-saturation-slider"
-              />
-
-              <label className="theme-picker-label" style={{ marginTop: '12px' }}>背景亮度</label>
-              <input
-                type="range"
-                min="0"
-                max="80"
-                value={themeBgLightness}
-                onChange={(e) => setThemeBgLightness(parseInt(e.target.value))}
-                className="theme-lightness-slider"
-              />
-
-              <div className="theme-presets">
-                <button onClick={() => setThemeHue(270)} className="theme-preset" style={{ background: 'hsl(270, 70%, 65%)' }}>紫</button>
-                <button onClick={() => setThemeHue(0)} className="theme-preset" style={{ background: 'hsl(0, 70%, 65%)' }}>红</button>
-                <button onClick={() => setThemeHue(120)} className="theme-preset" style={{ background: 'hsl(120, 70%, 65%)' }}>绿</button>
-                <button onClick={() => setThemeHue(200)} className="theme-preset" style={{ background: 'hsl(200, 70%, 65%)' }}>蓝</button>
-                <button onClick={() => setThemeHue(40)} className="theme-preset" style={{ background: 'hsl(40, 70%, 65%)' }}>金</button>
-                <button onClick={() => setThemeHue(300)} className="theme-preset" style={{ background: 'hsl(300, 70%, 65%)' }}>粉</button>
+                {/* LoRA管理区域 */}
+                <div className="settings-section">
+                  <button
+                    className="settings-section-header"
+                    onClick={() => setShowLoraManager(!showLoraManager)}
+                  >
+                    <span>LoRA 管理</span>
+                    <span className="settings-arrow">{showLoraManager ? '▼' : '▶'}</span>
+                  </button>
+                  {showLoraManager && (
+                    <div className="lora-manager-list">
+                      {availableLoras.length === 0 ? (
+                        <div className="lora-manager-empty">加载中...</div>
+                      ) : (
+                        availableLoras.map((lora) => {
+                          const loraConfig = enabledLoras.find(l => l.name === lora);
+                          const isEnabled = !!loraConfig;
+                          return (
+                            <div key={lora} className="lora-manager-item">
+                              <label className="lora-manager-checkbox">
+                                <input
+                                  type="checkbox"
+                                  checked={isEnabled}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setEnabledLoras([...enabledLoras, { name: lora, displayName: '', triggerWord: '' }]);
+                                    } else {
+                                      setEnabledLoras(enabledLoras.filter(l => l.name !== lora));
+                                    }
+                                  }}
+                                />
+                                <span className="lora-manager-name" title={lora}>{lora}</span>
+                              </label>
+                              {isEnabled && (
+                                <div className="lora-manager-fields">
+                                  <input
+                                    type="text"
+                                    className="lora-field-input"
+                                    placeholder="显示名称"
+                                    value={loraConfig.displayName}
+                                    onChange={(e) => {
+                                      setEnabledLoras(enabledLoras.map(l =>
+                                        l.name === lora ? { ...l, displayName: e.target.value } : l
+                                      ));
+                                    }}
+                                  />
+                                  <input
+                                    type="text"
+                                    className="lora-field-input"
+                                    placeholder="触发词"
+                                    value={loraConfig.triggerWord}
+                                    onChange={(e) => {
+                                      setEnabledLoras(enabledLoras.map(l =>
+                                        l.name === lora ? { ...l, triggerWord: e.target.value } : l
+                                      ));
+                                    }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1409,6 +1566,24 @@ const App = () => {
                       ×
                     </button>
                   )}
+
+                  {/* 粘贴按钮 - 左下角 */}
+                  <button
+                    className="paste-prompt-button"
+                    onClick={async () => {
+                      try {
+                        const text = await navigator.clipboard.readText();
+                        if (text) {
+                          updatePromptText(promptItem.id, text);
+                        }
+                      } catch (err) {
+                        console.error('无法读取剪贴板:', err);
+                      }
+                    }}
+                    title="粘贴剪贴板内容"
+                  >
+                    📋
+                  </button>
 
                   {/* 发送按钮 - 始终显示在右下角 */}
                   <button
@@ -1496,6 +1671,74 @@ const App = () => {
                   onChange={(e) => setSteps(parseInt(e.target.value))}
                   className="slider"
                 />
+              </div>
+
+              {/* LoRA 设置 */}
+              <div className="form-group lora-settings">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={loraEnabled}
+                    onChange={(e) => setLoraEnabled(e.target.checked)}
+                  />
+                  <span>启用 LoRA</span>
+                </label>
+
+                {loraEnabled && (
+                  <div className="lora-options">
+                    <div className="lora-input-group">
+                      <label className="label">选择 LoRA</label>
+                      <select
+                        className="select lora-select"
+                        value={loraName}
+                        onChange={(e) => setLoraName(e.target.value)}
+                      >
+                        {enabledLoras.length === 0 ? (
+                          <option value="">请先在设置中启用 LoRA</option>
+                        ) : (
+                          enabledLoras.map((lora) => {
+                            // 兼容旧格式
+                            const loraName = typeof lora === 'string' ? lora : lora.name;
+                            const loraDisplay = typeof lora === 'string' ? lora : (lora.displayName || lora.name);
+                            return (
+                              <option key={loraName} value={loraName}>
+                                {loraDisplay}
+                              </option>
+                            );
+                          })
+                        )}
+                      </select>
+                    </div>
+
+                    <div className="lora-sliders">
+                      <div className="lora-slider-group">
+                        <label className="label">模型权重: {loraStrengthModel.toFixed(2)}</label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="2"
+                          step="0.05"
+                          value={loraStrengthModel}
+                          onChange={(e) => setLoraStrengthModel(parseFloat(e.target.value))}
+                          className="slider"
+                        />
+                      </div>
+
+                      <div className="lora-slider-group">
+                        <label className="label">CLIP 权重: {loraStrengthClip.toFixed(2)}</label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="2"
+                          step="0.05"
+                          value={loraStrengthClip}
+                          onChange={(e) => setLoraStrengthClip(parseFloat(e.target.value))}
+                          className="slider"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* 超分倍率滑块 */}
@@ -1752,8 +1995,8 @@ const App = () => {
                           }}
                         />
                       )}
-                      {/* 取消按钮 - 仅在queue状态显示 */}
-                      {placeholder.status === 'queue' && (
+                      {/* 取消按钮 - 仅在queue状态且非loading时显示 */}
+                      {placeholder.status === 'queue' && !placeholder.isLoading && (
                         <button
                           className="cancel-queue-button"
                           onClick={() => cancelQueuedTask(placeholder.id)}
