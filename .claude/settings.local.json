@@ -19,7 +19,8 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\n统一设置面板，增强LoRA管理功能\n\n- 合并主题设置和LoRA管理到统一的设置面板\n- 右上角只保留视图切换和设置按钮\n- LoRA管理支持自定义显示名称和触发词\n- 生成时自动添加触发词到提示词前面\n- 左侧LoRA选择器改为下拉菜单，显示自定义名称\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git push:*)",
       "Bash(npm run build:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npx vite build --mode development)"
     ]
   }
 }

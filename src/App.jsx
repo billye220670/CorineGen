@@ -103,8 +103,14 @@ const App = () => {
   const [newPresetName, setNewPresetName] = useState('');
   const [hoveredPresetId, setHoveredPresetId] = useState(null);
 
+  // 批量命名下载相关状态
+  const [showBatchDownloadModal, setShowBatchDownloadModal] = useState(false);
+  const [batchDownloadPrefix, setBatchDownloadPrefix] = useState('');
+
   const firstSeedRef = useRef(null);
   const heartbeatRef = useRef(null); // 心跳检测定时器
+  const longPressTimerRef = useRef(null); // 长按计时器
+  const longPressTriggeredRef = useRef(false); // 长按是否已触发
 
   // 计算下一个提示词ID
   const savedPromptsForId = loadFromStorage('corineGen_prompts', [{ id: 1 }]);
@@ -1715,6 +1721,53 @@ const App = () => {
     }
   };
 
+  // 长按开始 - 进入多选模式
+  const handleLongPressStart = (placeholderId) => {
+    longPressTimerRef.current = setTimeout(() => {
+      // 标记长按已触发
+      longPressTriggeredRef.current = true;
+      // 进入多选模式并选中当前图片
+      setIsMultiSelectMode(true);
+      setSelectedImages(new Set([placeholderId]));
+    }, 500); // 500ms长按
+  };
+
+  // 长按结束 - 取消计时器
+  const handleLongPressEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  // 批量命名并下载
+  const batchDownloadWithPrefix = async () => {
+    if (selectedImages.size === 0 || !batchDownloadPrefix.trim()) return;
+
+    const selectedPlaceholders = imagePlaceholdersRef.current.filter(
+      p => selectedImages.has(p.id) && p.status === 'completed'
+    );
+
+    let index = 1;
+    for (const placeholder of selectedPlaceholders) {
+      const isHQ = placeholder.upscaleStatus === 'completed' && placeholder.displayQuality === 'hq' && placeholder.hqImageUrl;
+      const url = isHQ ? placeholder.hqImageUrl : placeholder.imageUrl;
+      const originalFilename = isHQ ? placeholder.hqFilename : placeholder.filename;
+      // 获取文件扩展名
+      const ext = originalFilename?.split('.').pop() || 'png';
+      const newFilename = `${batchDownloadPrefix.trim()}_${String(index).padStart(3, '0')}.${ext}`;
+
+      await downloadImage(url, newFilename);
+      // 稍微延迟以避免浏览器阻止多个下载
+      await new Promise(resolve => setTimeout(resolve, 300));
+      index++;
+    }
+
+    // 关闭模态框并重置
+    setShowBatchDownloadModal(false);
+    setBatchDownloadPrefix('');
+  };
+
   return (
     <div className={`app ${themeBgLightness > 40 ? 'light-mode' : ''}`} style={{
       '--theme-hue': themeHue,
@@ -2489,6 +2542,14 @@ const App = () => {
                   批量下载
                 </button>
                 <button
+                  className="batch-action-button rename-download"
+                  onClick={() => setShowBatchDownloadModal(true)}
+                  disabled={selectedImages.size === 0}
+                  title="批量命名并下载"
+                >
+                  批量命名并下载
+                </button>
+                <button
                   className="batch-action-button upscale"
                   onClick={batchUpscaleImages}
                   disabled={selectedImages.size === 0}
@@ -2558,6 +2619,11 @@ const App = () => {
                           }
                           alt={`Generated ${placeholder.id}`}
                           onClick={() => {
+                            // 如果刚触发了长按，跳过点击事件
+                            if (longPressTriggeredRef.current) {
+                              longPressTriggeredRef.current = false;
+                              return;
+                            }
                             if (placeholder.status === 'completed') {
                               if (isMultiSelectMode) {
                                 // 多选模式下点击是选中/取消选中
@@ -2571,6 +2637,20 @@ const App = () => {
                               }
                             }
                           }}
+                          onMouseDown={() => {
+                            if (placeholder.status === 'completed' && !isMultiSelectMode) {
+                              handleLongPressStart(placeholder.id);
+                            }
+                          }}
+                          onMouseUp={handleLongPressEnd}
+                          onMouseLeave={handleLongPressEnd}
+                          onTouchStart={() => {
+                            if (placeholder.status === 'completed' && !isMultiSelectMode) {
+                              handleLongPressStart(placeholder.id);
+                            }
+                          }}
+                          onTouchEnd={handleLongPressEnd}
+                          onTouchCancel={handleLongPressEnd}
                           className={`generated-image ${placeholder.status === 'revealing' || placeholder.status === 'completed' ? 'revealing' : ''} ${placeholder.upscaleStatus === 'upscaling' ? 'upscaling-blur' : ''}`}
                           style={{ pointerEvents: placeholder.status === 'completed' ? 'auto' : 'none' }}
                           draggable={placeholder.status === 'completed' && placeholder.seed !== null && !isMultiSelectMode}
@@ -2691,6 +2771,58 @@ const App = () => {
         </div>
         </div>
       </div>
+
+      {/* 批量命名下载模态框 */}
+      {showBatchDownloadModal && (
+        <div className="preset-modal-overlay" onClick={() => setShowBatchDownloadModal(false)}>
+          <div className="preset-modal batch-download-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="preset-modal-header">
+              <h3>批量命名并下载</h3>
+              <button
+                className="preset-modal-close"
+                onClick={() => setShowBatchDownloadModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="preset-modal-content">
+              <div className="batch-download-info">
+                将下载 {selectedImages.size} 张图片
+              </div>
+              <label className="batch-download-label">文件名前缀</label>
+              <input
+                type="text"
+                className="batch-download-input"
+                value={batchDownloadPrefix}
+                onChange={(e) => setBatchDownloadPrefix(e.target.value)}
+                placeholder="例如: my_images"
+                autoFocus
+              />
+              <div className="batch-download-preview">
+                文件名预览: {batchDownloadPrefix || 'prefix'}_001.png
+              </div>
+            </div>
+            <div className="preset-modal-actions">
+              <button
+                className="preset-modal-cancel"
+                onClick={() => {
+                  setShowBatchDownloadModal(false);
+                  setBatchDownloadPrefix('');
+                }}
+              >
+                取消
+              </button>
+              <button
+                className="preset-modal-confirm"
+                onClick={batchDownloadWithPrefix}
+                disabled={!batchDownloadPrefix.trim()}
+              >
+                下载
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 新建预设面板 */}
       {showNewPresetPanel && (
