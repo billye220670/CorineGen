@@ -69,6 +69,10 @@ const App = () => {
   const [loraStrengthModel, setLoraStrengthModel] = useState(() => loadFromStorage('corineGen_loraStrengthModel', 1));
   const [loraStrengthClip, setLoraStrengthClip] = useState(() => loadFromStorage('corineGen_loraStrengthClip', 1));
 
+  // 采样设置
+  const [samplerName, setSamplerName] = useState(() => loadFromStorage('corineGen_samplerName', 'euler'));
+  const [scheduler, setScheduler] = useState(() => loadFromStorage('corineGen_scheduler', 'simple'));
+
   // LoRA 管理
   const [availableLoras, setAvailableLoras] = useState([]); // 从ComfyUI获取的所有LoRA
   // enabledLoras结构: [{ name: 'xxx.safetensors', displayName: '自定义名', triggerWord: '触发词' }, ...]
@@ -224,6 +228,15 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('corineGen_enabledLoras', JSON.stringify(enabledLoras));
   }, [enabledLoras]);
+
+  // 采样设置保存
+  useEffect(() => {
+    localStorage.setItem('corineGen_samplerName', JSON.stringify(samplerName));
+  }, [samplerName]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_scheduler', JSON.stringify(scheduler));
+  }, [scheduler]);
 
   // 获取可用的LoRA列表
   useEffect(() => {
@@ -499,6 +512,10 @@ const App = () => {
 
     // 更新steps（使用保存的参数）
     workflow['4'].inputs.steps = currentSteps;
+
+    // 更新采样算法和调度方法
+    workflow['4'].inputs.sampler_name = samplerName;
+    workflow['4'].inputs.scheduler = scheduler;
 
     // 更新图像尺寸
     workflow['7'].inputs.width = dimensions.width;
@@ -1840,6 +1857,62 @@ const App = () => {
                     onChange={(e) => setSteps(parseInt(e.target.value))}
                     className="slider"
                   />
+                </div>
+                </div>
+              </details>
+
+              {/* 采样设置分组 */}
+              <details className="settings-group-collapsible" open>
+                <summary className="settings-group-summary">
+                  <span className="settings-group-title">采样设置</span>
+                </summary>
+                <div className="settings-group-content">
+
+                {/* 采样算法 */}
+                <div className="form-group">
+                  <label className="label">采样算法 (Sampler)</label>
+                  <div className="radio-group">
+                    {[
+                      { value: 'euler', label: 'Euler' },
+                      { value: 'euler_ancestral', label: 'Euler A' },
+                      { value: 'res_multistep', label: 'Res Multistep' },
+                      { value: 'dpmpp_2m_sde', label: 'DPM++ 2M SDE' }
+                    ].map((sampler) => (
+                      <label key={sampler.value} className="radio-label">
+                        <input
+                          type="radio"
+                          name="samplerName"
+                          value={sampler.value}
+                          checked={samplerName === sampler.value}
+                          onChange={() => setSamplerName(sampler.value)}
+                        />
+                        <span>{sampler.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 调度方法 */}
+                <div className="form-group">
+                  <label className="label">调度方法 (Scheduler)</label>
+                  <div className="radio-group">
+                    {[
+                      { value: 'simple', label: 'Simple' },
+                      { value: 'beta', label: 'Beta' },
+                      { value: 'ddim_uniform', label: 'DDIM Uniform' }
+                    ].map((sched) => (
+                      <label key={sched.value} className="radio-label">
+                        <input
+                          type="radio"
+                          name="scheduler"
+                          value={sched.value}
+                          checked={scheduler === sched.value}
+                          onChange={() => setScheduler(sched.value)}
+                        />
+                        <span>{sched.label}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 </div>
               </details>
