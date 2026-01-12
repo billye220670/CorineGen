@@ -107,6 +107,9 @@ const App = () => {
   const [showBatchDownloadModal, setShowBatchDownloadModal] = useState(false);
   const [batchDownloadPrefix, setBatchDownloadPrefix] = useState('');
 
+  // 批量删除确认对话框状态
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+
   const firstSeedRef = useRef(null);
   const heartbeatRef = useRef(null); // 心跳检测定时器
   const longPressTimerRef = useRef(null); // 长按计时器
@@ -427,6 +430,57 @@ const App = () => {
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, [showPresetDropdown]);
+
+  // 拖拽时自动滚动页面（当拖拽到边缘时）
+  useEffect(() => {
+    let scrollInterval = null;
+    const SCROLL_ZONE = 80; // 距离边缘多少像素触发滚动
+    const SCROLL_SPEED = 15; // 滚动速度
+
+    const handleDragOver = (e) => {
+      const { clientY } = e;
+      const windowHeight = window.innerHeight;
+
+      // 清除之前的滚动
+      if (scrollInterval) {
+        clearInterval(scrollInterval);
+        scrollInterval = null;
+      }
+
+      // 接近顶部边缘，向上滚动
+      if (clientY < SCROLL_ZONE) {
+        scrollInterval = setInterval(() => {
+          window.scrollBy(0, -SCROLL_SPEED);
+        }, 16);
+      }
+      // 接近底部边缘，向下滚动
+      else if (clientY > windowHeight - SCROLL_ZONE) {
+        scrollInterval = setInterval(() => {
+          window.scrollBy(0, SCROLL_SPEED);
+        }, 16);
+      }
+    };
+
+    const handleDragEnd = () => {
+      if (scrollInterval) {
+        clearInterval(scrollInterval);
+        scrollInterval = null;
+      }
+    };
+
+    document.addEventListener('dragover', handleDragOver);
+    document.addEventListener('dragend', handleDragEnd);
+    document.addEventListener('drop', handleDragEnd);
+
+    return () => {
+      document.removeEventListener('dragover', handleDragOver);
+      document.removeEventListener('dragend', handleDragEnd);
+      document.removeEventListener('drop', handleDragEnd);
+      if (scrollInterval) {
+        clearInterval(scrollInterval);
+      }
+    };
+  }, []);
 
   // 获取可用的LoRA列表
   const fetchAvailableLoras = async () => {
@@ -2417,7 +2471,13 @@ const App = () => {
                       name="seedMode"
                       value="fixed"
                       checked={seedMode === 'fixed'}
-                      onChange={() => setSeedMode('fixed')}
+                      onChange={() => {
+                        setSeedMode('fixed');
+                        // 切换时同步种子值：将首次固定的值同步到固定种子
+                        if (firstFixedSeed) {
+                          setFixedSeed(firstFixedSeed);
+                        }
+                      }}
                     />
                     <span>固定</span>
                   </label>
@@ -2427,7 +2487,13 @@ const App = () => {
                       name="seedMode"
                       value="first-fixed"
                       checked={seedMode === 'first-fixed'}
-                      onChange={() => setSeedMode('first-fixed')}
+                      onChange={() => {
+                        setSeedMode('first-fixed');
+                        // 切换时同步种子值：将固定种子的值同步到首次固定
+                        if (fixedSeed) {
+                          setFirstFixedSeed(fixedSeed);
+                        }
+                      }}
                     />
                     <span>首次固定</span>
                   </label>
@@ -2527,6 +2593,45 @@ const App = () => {
           <div className="images-container" ref={imagesContainerRef}>
           {/* 控制栏 */}
           <div className="images-toolbar">
+            {/* 多选模式下的全选按钮 - 最左侧 */}
+            {isMultiSelectMode && (() => {
+              const completedImages = imagePlaceholders.filter(p => p.status === 'completed');
+              const completedIds = new Set(completedImages.map(p => p.id));
+              const selectedCompletedCount = [...selectedImages].filter(id => completedIds.has(id)).length;
+              const totalCompleted = completedImages.length;
+
+              // 判断选中状态：全选、半选、全不选
+              const selectState = totalCompleted === 0 ? 'none' :
+                selectedCompletedCount === totalCompleted ? 'all' :
+                selectedCompletedCount > 0 ? 'partial' : 'none';
+
+              const handleSelectAllToggle = () => {
+                if (selectState === 'none') {
+                  // 全不选 -> 全选
+                  setSelectedImages(new Set(completedImages.map(p => p.id)));
+                } else {
+                  // 全选或半选 -> 全不选
+                  setSelectedImages(new Set());
+                }
+              };
+
+              return (
+                <button
+                  className={`select-all-button ${selectState}`}
+                  onClick={handleSelectAllToggle}
+                  disabled={totalCompleted === 0}
+                  title={selectState === 'all' ? '取消全选' : selectState === 'partial' ? '取消选择' : '全选'}
+                >
+                  <span className="select-all-checkbox">
+                    {selectState === 'all' && '✓'}
+                    {selectState === 'partial' && '−'}
+                  </span>
+                  <span className="select-all-label">
+                    {selectState === 'all' ? '全选' : selectState === 'partial' ? '部分' : '全选'}
+                  </span>
+                </button>
+              );
+            })()}
             {/* 多选模式下的批量操作按钮 */}
             {isMultiSelectMode && (
               <div className="batch-actions">
@@ -2557,7 +2662,7 @@ const App = () => {
                 </button>
                 <button
                   className="batch-action-button delete"
-                  onClick={batchDeleteImages}
+                  onClick={() => setShowDeleteConfirmModal(true)}
                   disabled={selectedImages.size === 0}
                   title="批量删除"
                 >
@@ -2654,6 +2759,8 @@ const App = () => {
                           draggable={placeholder.status === 'completed' && placeholder.seed !== null && !isMultiSelectMode}
                           onDragStart={(e) => {
                             if (placeholder.status === 'completed' && placeholder.seed !== null && !isMultiSelectMode) {
+                              // 拖拽开始时取消长按计时器，避免与长按冲突
+                              handleLongPressEnd();
                               e.dataTransfer.setData('seed', placeholder.seed.toString());
                             }
                           }}
@@ -2816,6 +2923,45 @@ const App = () => {
                 disabled={!batchDownloadPrefix.trim()}
               >
                 下载
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 批量删除确认对话框 */}
+      {showDeleteConfirmModal && (
+        <div className="preset-modal-overlay" onClick={() => setShowDeleteConfirmModal(false)}>
+          <div className="preset-modal delete-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="preset-modal-header">
+              <h3>确认删除</h3>
+              <button
+                className="preset-modal-close"
+                onClick={() => setShowDeleteConfirmModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="preset-modal-content">
+              <div className="delete-confirm-message">
+                确认删除 {selectedImages.size} 个项目？
+              </div>
+            </div>
+            <div className="preset-modal-actions">
+              <button
+                className="preset-modal-cancel"
+                onClick={() => setShowDeleteConfirmModal(false)}
+              >
+                取消
+              </button>
+              <button
+                className="preset-modal-confirm delete"
+                onClick={() => {
+                  batchDeleteImages();
+                  setShowDeleteConfirmModal(false);
+                }}
+              >
+                确认
               </button>
             </div>
           </div>

@@ -1596,6 +1596,71 @@ body {
   border-color: rgba(220, 38, 38, 0.9);
 }
 
+/* 全选状态按钮 */
+.select-all-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  margin-right: auto; /* 推到最左侧 */
+}
+
+.select-all-button:hover:not(:disabled) {
+  opacity: 0.8;
+}
+
+.select-all-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.select-all-checkbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 2px solid var(--theme-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  color: transparent;
+  transition: all 0.2s ease;
+}
+
+/* 全选状态 */
+.select-all-button.all .select-all-checkbox {
+  background: var(--theme-primary);
+  border-color: var(--theme-primary);
+  color: white;
+}
+
+/* 半选状态 */
+.select-all-button.partial .select-all-checkbox {
+  background: var(--theme-primary);
+  border-color: var(--theme-primary);
+  color: white;
+}
+
+/* 全不选状态 */
+.select-all-button.none .select-all-checkbox {
+  background: transparent;
+  border-color: var(--theme-text);
+  opacity: 0.6;
+}
+
+/* 全选按钮文字标签 */
+.select-all-label {
+  font-size: 0.8rem;
+  color: var(--theme-text);
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
 /* 多选模式下的图片选中效果 */
 .image-placeholder.multi-select-mode {
   cursor: pointer;
@@ -2371,6 +2436,26 @@ body {
   cursor: not-allowed;
 }
 
+/* 删除确认对话框 */
+.delete-confirm-modal {
+  max-width: 320px;
+}
+
+.delete-confirm-message {
+  text-align: center;
+  font-size: 1rem;
+  color: var(--theme-text);
+  padding: 8px 0;
+}
+
+.preset-modal-confirm.delete {
+  background: #dc3545;
+}
+
+.preset-modal-confirm.delete:hover:not(:disabled) {
+  background: #c82333;
+}
+
 /* 亮色模式 - 批量下载模态框 */
 .light-mode .batch-download-input {
   background: hsl(0, 0%, 92%);
@@ -2462,4 +2547,8 @@ body {
 
 .light-mode .batch-action-button {
   background: hsl(0, 0%, 85%);
+}
+
+.light-mode .select-all-button.none .select-all-checkbox {
+  border-color: hsl(0, 0%, 40%);
 }
