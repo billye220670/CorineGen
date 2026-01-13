@@ -698,6 +698,35 @@ body {
   position: relative;
 }
 
+/* 底部按钮区域遮罩 - 防止文字滚动到按钮下方 */
+.textarea-wrapper::after {
+  content: '';
+  position: absolute;
+  bottom: 2px; /* 留出边框空间 */
+  left: 2px;
+  right: 2px;
+  height: 44px; /* 覆盖按钮区域 */
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    hsla(calc(var(--theme-hue) * 1), calc(var(--theme-bg-saturation) * 1%), calc(var(--theme-bg-lightness) * 0.375%), 0.85) 30%,
+    hsla(calc(var(--theme-hue) * 1), calc(var(--theme-bg-saturation) * 1%), calc(var(--theme-bg-lightness) * 0.375%), 1) 100%
+  );
+  border-radius: 0 0 6px 6px;
+  pointer-events: none; /* 允许点击穿透到下面的按钮 */
+  z-index: 5;
+}
+
+/* 亮色模式下的遮罩 */
+.light-mode .textarea-wrapper::after {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    hsla(var(--theme-hue), 20%, 88%, 0.85) 30%,
+    hsla(var(--theme-hue), 20%, 88%, 1) 100%
+  );
+}
+
 /* 删除按钮 - 右上角 */
 .delete-prompt-button {
   position: absolute;
@@ -757,11 +786,11 @@ body {
   cursor: not-allowed;
 }
 
-/* 粘贴按钮 - 左下角（与发送按钮样式一致） */
+/* 粘贴按钮 - 左下角第二个位置 */
 .paste-prompt-button {
   position: absolute;
   bottom: 8px;
-  left: 8px;
+  left: 48px;
   width: 32px;
   height: 32px;
   border: none;
@@ -777,9 +806,263 @@ body {
   padding: 0;
 }
 
+/* 有参考图片时，粘贴按钮移到缩略图右侧 */
+.paste-prompt-button.with-ref-image {
+  left: 120px;
+}
+
 .paste-prompt-button:hover {
   color: rgba(255, 255, 255, 1);
   transform: scale(1.1);
+}
+
+/* 图片上传按钮 - 左下角第一个位置 */
+.upload-image-button {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.upload-image-button:hover {
+  color: rgba(255, 255, 255, 1);
+  transform: scale(1.1);
+}
+
+.light-mode .upload-image-button {
+  color: rgba(60, 60, 60, 0.6);
+}
+
+.light-mode .upload-image-button:hover {
+  color: rgba(30, 30, 30, 1);
+}
+
+/* 参考图片容器 - 有图片时显示在上传按钮位置（上传按钮隐藏） */
+.ref-image-container {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 10;
+}
+
+/* 参考图片缩略图 */
+.ref-image-thumbnail {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(50, 50, 55, 0.95);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.ref-image-thumbnail:hover {
+  background: rgba(60, 60, 65, 0.98);
+}
+
+.ref-image-thumbnail img {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.ref-image-mode-label {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.ref-image-thumbnail .dropdown-icon {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* 降噪强度输入框 */
+.denoise-input {
+  width: 42px;
+  padding: 2px 4px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.75rem;
+  text-align: center;
+  cursor: text;
+  transition: all 0.2s;
+  -moz-appearance: textfield;
+}
+
+.denoise-input::-webkit-outer-spin-button,
+.denoise-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.denoise-input:focus {
+  outline: none;
+  border-color: var(--theme-primary);
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.denoise-input:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.light-mode .denoise-input {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.15);
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.light-mode .denoise-input:focus {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: var(--theme-primary);
+}
+
+.light-mode .denoise-input:hover {
+  border-color: rgba(0, 0, 0, 0.3);
+}
+
+.light-mode .ref-image-thumbnail {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.light-mode .ref-image-thumbnail:hover {
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
+}
+
+.light-mode .ref-image-mode-label {
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.light-mode .ref-image-thumbnail .dropdown-icon {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+/* 移除参考图片按钮 - iOS徽章风格，右上角，hover时显示 */
+.remove-ref-image {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: rgba(100, 100, 100, 0.9);
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  z-index: 5;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* hover缩略图时显示删除按钮 */
+.ref-image-thumbnail:hover .remove-ref-image {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.remove-ref-image:hover {
+  background: rgba(220, 60, 60, 0.95);
+  transform: scale(1.1);
+}
+
+/* 参考图片下拉菜单 */
+.ref-image-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 8px;
+  background: rgba(30, 30, 35, 0.98);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 140px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+}
+
+.ref-image-menu .menu-item {
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.8);
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.ref-image-menu .menu-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.ref-image-menu .menu-item.active {
+  background: var(--theme-primary);
+  color: white;
+}
+
+.light-mode .ref-image-menu .menu-item {
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.light-mode .ref-image-menu .menu-item:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.light-mode .ref-image-menu .menu-item.active {
+  background: var(--theme-primary);
+  color: white;
+}
+
+/* 亮色模式 - 下拉菜单背景 */
+.light-mode .ref-image-menu {
+  background: rgba(245, 245, 250, 0.98);
+}
+
+/* 拖拽提示词框的拖拽状态 */
+.textarea-wrapper.drag-over {
+  border-color: var(--theme-primary) !important;
+  box-shadow: 0 0 20px var(--theme-primary-transparent) !important;
+}
+
+.textarea-wrapper.drag-over::before {
+  content: '拖放图片到此处';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--theme-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 20;
+  background: var(--theme-bg-card);
+  padding: 8px 16px;
+  border-radius: 6px;
 }
 
 /* 全部生成按钮 */
@@ -824,7 +1107,7 @@ body {
 .textarea,
 .input {
   width: 100%;
-  padding: 14px;
+  padding: 14px 14px 48px 14px; /* 底部留空给按钮行 */
   background: hsla(calc(var(--theme-hue) * 1), calc(var(--theme-bg-saturation) * 1%), calc(var(--theme-bg-lightness) * 0.375%), 0.9);
   border: 2px solid var(--theme-border);
   border-radius: 8px;

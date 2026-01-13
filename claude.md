@@ -104,19 +104,42 @@ const checkConnection = async (silent = false) => { ... }
 - 删除操作有确认对话框
 - 拖拽种子到输入框时自动滚动页面
 
+### 9. 图生图 & ControlNet (App.jsx:1475-1706)
+- 支持两种参考图片生成模式
+- **图生图 (Image2Image)**: 直接使用参考图片进行图像到图像转换
+- **ControlNet**: 使用参考图片的线稿/深度/姿势进行控制生成
+- 工作流文件: `Image2ImageAPI.json`, `ZIT_CNN_API.json`
+- 降噪强度暂时写死 `IMG2IMG_DENOISE = 0.6`
+- 不支持 LoRA，忽略用户的 LoRA 设置
+- 输出尺寸跟随输入图片
+- 支持批量生成（仅循环模式）
+
+**上传方式**:
+- 点击提示词框左下角的图片上传按钮
+- 拖拽图片到提示词输入框
+
+**模式选择**:
+- 直接使用图片 → `Image2ImageAPI.json`
+- 使用图片线稿 → `ZIT_CNN_API.json` (index=0)
+- 使用图片深度 → `ZIT_CNN_API.json` (index=1)
+- 使用图片姿势 → `ZIT_CNN_API.json` (index=2)
+
 ## 关键代码位置速查
 
 | 功能 | 文件 | 行号 |
 |------|------|------|
-| ComfyUI 连接检查 | App.jsx | 471-508 |
-| LoRA 列表获取 | App.jsx | 432-442 |
-| 图像生成队列 | App.jsx | 196-264 |
-| 高清化队列 | App.jsx | 797-884 |
-| WebSocket 进度监听 | App.jsx | 292-388 (batch), 476-564 (loop) |
+| ComfyUI 连接检查 | App.jsx | 530-570 |
+| LoRA 列表获取 | App.jsx | 512-524 |
+| 图像生成队列 | App.jsx | 972-1042 |
+| 高清化队列 | App.jsx | 1541-1650 |
+| 图生图工作流构建 | App.jsx | 1477-1508 |
+| ControlNet工作流构建 | App.jsx | 1510-1539 |
+| 图生图/CN生成循环 | App.jsx | 1475-1706 |
+| 参考图片上传处理 | App.jsx | 625-670 |
 | 主题管理 | App.jsx | 139-151, App.css:1-50 |
 | localStorage 持久化 | App.jsx | 50-75 (loadFromStorage) |
-| 种子拖拽复制 | App.jsx | 886-943 |
-| LoRA 管理器 UI | App.jsx | 1105-1200+ |
+| 提示词框 UI | App.jsx | 2064-2216 |
+| 参考图片CSS样式 | App.css | 785-964 |
 
 ## 重要实现细节
 
