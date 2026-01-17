@@ -4,7 +4,7 @@ import WebSocket from 'ws';
  * 设置 WebSocket 代理
  * 将客户端的 WebSocket 连接代理到 ComfyUI
  */
-export function setupWSProxy(wss, comfyuiHost, apiKey) {
+export function setupWSProxy(wss, comfyuiHost) {
   // 将 HTTP URL 转换为 WebSocket URL
   const wsHost = comfyuiHost.replace('http://', 'ws://').replace('https://', 'wss://');
 
@@ -12,14 +12,6 @@ export function setupWSProxy(wss, comfyuiHost, apiKey) {
     // 从查询字符串提取参数
     const url = new URL(req.url, `http://${req.headers.host}`);
     const clientId = url.searchParams.get('clientId');
-    const providedKey = url.searchParams.get('apiKey');
-
-    // 验证 API Key
-    if (apiKey && providedKey !== apiKey) {
-      console.log(`WebSocket auth failed for client: ${clientId}`);
-      clientWs.close(4001, 'Unauthorized');
-      return;
-    }
 
     console.log(`Client connected: ${clientId}`);
 

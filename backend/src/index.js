@@ -5,7 +5,6 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { setupWSProxy } from './proxy/wsProxy.js';
-import { authMiddleware } from './middleware/auth.js';
 
 // 加载环境变量
 dotenv.config();
@@ -30,7 +29,7 @@ app.use(cors({
   credentials: true
 }));
 
-// 健康检查端点（不需要认证）
+// 健康检查端点
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -38,9 +37,6 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
-
-// API Key 认证中间件（所有 /api 路由需要认证）
-app.use('/api', authMiddleware);
 
 // 处理 multipart/form-data 的代理配置（图片上传）
 const uploadProxy = createProxyMiddleware({
@@ -82,7 +78,7 @@ app.use('/api', jsonProxy);
 
 // 设置 WebSocket 代理
 const wss = new WebSocketServer({ server, path: '/ws' });
-setupWSProxy(wss, COMFYUI_HOST, process.env.API_KEY);
+setupWSProxy(wss, COMFYUI_HOST);
 
 // 启动服务器
 // 监听 0.0.0.0 以允许外部访问（花生壳穿透需要）
