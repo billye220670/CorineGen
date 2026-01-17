@@ -85,13 +85,14 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 setupWSProxy(wss, COMFYUI_HOST, process.env.API_KEY);
 
 // 启动服务器
-server.listen(PORT, () => {
+// 监听 0.0.0.0 以允许外部访问（花生壳穿透需要）
+server.listen(PORT, '0.0.0.0', () => {
   console.log('='.repeat(50));
   console.log('CorineGen Backend Server');
   console.log('='.repeat(50));
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on http://0.0.0.0:${PORT}`);
   console.log(`Proxying to ComfyUI at ${COMFYUI_HOST}`);
   console.log(`Allowed origins: ${ALLOWED_ORIGINS.join(', ')}`);
-  console.log(`WebSocket endpoint: ws://localhost:${PORT}/ws`);
+  console.log(`WebSocket endpoint: ws://0.0.0.0:${PORT}/ws`);
   console.log('='.repeat(50));
 });

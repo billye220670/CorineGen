@@ -10,6 +10,7 @@ const directComfyUI = process.env.VITE_DIRECT_COMFYUI === 'true';
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: true, // 允许通过 IP 地址访问
     port: 5173,
     proxy: directComfyUI ? {
       // 直连 ComfyUI（开发调试用）

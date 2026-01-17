@@ -21,7 +21,8 @@
       "Bash(npm run build:*)",
       "Bash(git commit:*)",
       "Bash(npx vite build --mode development)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(curl:*)"
     ]
   }
 }
