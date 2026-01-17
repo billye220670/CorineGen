@@ -20,6 +20,18 @@ export function setupWSProxy(wss, comfyuiHost) {
 
     comfyWs.on('open', () => {
       console.log(`Connected to ComfyUI for client: ${clientId}`);
+
+      // 对 ComfyUI 连接启用保活
+      const comfyPingInterval = setInterval(() => {
+        if (comfyWs.readyState === WebSocket.OPEN) {
+          comfyWs.ping();  // ws 库的原生 ping
+        }
+      }, 20000);
+
+      // 确保断开时清除定时器
+      comfyWs.once('close', () => {
+        clearInterval(comfyPingInterval);
+      });
     });
 
     // 转发 ComfyUI 消息到客户端
@@ -31,10 +43,26 @@ export function setupWSProxy(wss, comfyuiHost) {
       }
     });
 
-    // 转发客户端消息到 ComfyUI（如果需要）
+    // 转发客户端消息到 ComfyUI（包括 ping 处理）
     clientWs.on('message', (data) => {
-      if (comfyWs.readyState === WebSocket.OPEN) {
-        comfyWs.send(data);
+      try {
+        const message = JSON.parse(data);
+
+        // 处理前端 ping
+        if (message.type === 'ping') {
+          clientWs.send(JSON.stringify({ type: 'pong' }));
+          return;
+        }
+
+        // 其他消息转发到 ComfyUI
+        if (comfyWs.readyState === WebSocket.OPEN) {
+          comfyWs.send(data);
+        }
+      } catch (err) {
+        // 非 JSON 消息直接转发
+        if (comfyWs.readyState === WebSocket.OPEN) {
+          comfyWs.send(data);
+        }
       }
     });
 

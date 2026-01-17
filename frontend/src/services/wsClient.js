@@ -9,8 +9,17 @@ class WsClient {
   constructor() {
     this.ws = null;
     this.listeners = new Map();
-    this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 3;
+    this.reconnectAttempt = 0;
+    this.maxReconnectAttempts = 5;
+    this.reconnectDelays = [1000, 2000, 5000, 10000, 20000];
+    this.reconnectTimer = null;
+    this.isReconnecting = false;
+    this.onReconnectCallback = null;
+    this.onDisconnectCallback = null;
+    this.lastClientId = null;
+    this.pingInterval = null;
+    this.pongTimeout = null;
+    this.lastPongTime = null;
   }
 
   /**
@@ -20,6 +29,9 @@ class WsClient {
    */
   connect(clientId) {
     return new Promise((resolve, reject) => {
+      // 保存 clientId 用于重连
+      this.lastClientId = clientId;
+
       // 构建 WebSocket URL
       let url = `${API_CONFIG.wsUrl}/ws?clientId=${clientId}`;
 
@@ -34,7 +46,10 @@ class WsClient {
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
-        this.reconnectAttempts = 0;
+        console.log('WebSocket connected');
+        this.reconnectAttempt = 0;
+        this.isReconnecting = false;
+        this.startPing();
         resolve();
       };
 
@@ -44,9 +59,26 @@ class WsClient {
       };
 
       this.ws.onclose = (event) => {
-        // 4001 是认证失败的自定义关闭码
+        console.log('WebSocket closed:', event.code, event.reason);
+        this.stopPing();
+
+        // 4001 是认证失败，不重连
         if (event.code === 4001) {
           this.emit('auth_error', { message: 'Authentication failed' });
+          return;
+        }
+
+        // 1000 是正常关闭，不重连
+        if (event.code === 1000) return;
+
+        // 触发断开回调
+        if (this.onDisconnectCallback) {
+          this.onDisconnectCallback({ code: event.code, reason: event.reason });
+        }
+
+        // 自动重连
+        if (!this.isReconnecting && this.reconnectAttempt < this.maxReconnectAttempts) {
+          this.reconnect();
         }
       };
 
@@ -56,6 +88,13 @@ class WsClient {
         try {
           const message = JSON.parse(event.data);
           const { type, data } = message;
+
+          // 处理 pong 消息
+          if (type === 'pong') {
+            clearTimeout(this.pongTimeout);
+            this.lastPongTime = Date.now();
+            return;
+          }
 
           // 触发对应类型的监听器
           this.emit(type, data);
@@ -130,11 +169,115 @@ class WsClient {
   }
 
   /**
+   * 自动重连
+   */
+  reconnect() {
+    if (this.isReconnecting) return;
+
+    this.isReconnecting = true;
+    this.reconnectAttempt++;
+
+    const delay = this.reconnectDelays[this.reconnectAttempt - 1] || 20000;
+
+    // 通知 UI
+    this.emit('reconnecting', {
+      attempt: this.reconnectAttempt,
+      maxAttempts: this.maxReconnectAttempts,
+      delay: delay
+    });
+
+    this.reconnectTimer = setTimeout(async () => {
+      try {
+        // 使用上次的 clientId 重连
+        await this.connect(this.lastClientId);
+
+        this.emit('reconnected', { clientId: this.lastClientId });
+
+        if (this.onReconnectCallback) {
+          this.onReconnectCallback({ clientId: this.lastClientId });
+        }
+      } catch (err) {
+        console.error('Reconnect failed:', err);
+        this.isReconnecting = false;
+
+        if (this.reconnectAttempt < this.maxReconnectAttempts) {
+          this.reconnect();
+        } else {
+          this.emit('reconnect_failed', { error: err.message });
+        }
+      }
+    }, delay);
+  }
+
+  /**
+   * 取消重连
+   */
+  cancelReconnect() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.isReconnecting = false;
+    this.reconnectAttempt = this.maxReconnectAttempts;
+  }
+
+  /**
+   * 注册重连成功回调
+   * @param {Function} callback - 回调函数
+   */
+  onReconnect(callback) {
+    this.onReconnectCallback = callback;
+  }
+
+  /**
+   * 注册断开连接回调
+   * @param {Function} callback - 回调函数
+   */
+  onDisconnect(callback) {
+    this.onDisconnectCallback = callback;
+  }
+
+  /**
+   * 启动 Ping/Pong 保活
+   */
+  startPing() {
+    this.stopPing();  // 清除旧的定时器
+
+    this.pingInterval = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'ping' }));
+
+        // 设置 pong 超时（10 秒）
+        this.pongTimeout = setTimeout(() => {
+          console.warn('Pong timeout, connection may be dead');
+          this.ws.close();  // 触发 onclose，进而触发重连
+        }, 10000);
+      }
+    }, 20000);  // 每 20 秒 ping 一次
+  }
+
+  /**
+   * 停止 Ping/Pong 保活
+   */
+  stopPing() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+    if (this.pongTimeout) {
+      clearTimeout(this.pongTimeout);
+      this.pongTimeout = null;
+    }
+  }
+
+  /**
    * 关闭连接
    */
   close() {
+    this.stopPing();
+    this.cancelReconnect();
     if (this.ws) {
-      this.ws.close();
+      this.ws.close(1000);  // 1000 表示正常关闭
       this.ws = null;
     }
     this.listeners.clear();

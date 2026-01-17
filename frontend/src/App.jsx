@@ -100,7 +100,7 @@ const App = () => {
   const [error, setError] = useState('');
 
   // ComfyUI连接状态
-  const [connectionStatus, setConnectionStatus] = useState('checking'); // 'checking' | 'connected' | 'disconnected'
+  const [connectionStatus, setConnectionStatus] = useState('checking'); // 'checking' | 'connected' | 'disconnected' | 'reconnecting' | 'failed'
   const [connectionMessage, setConnectionMessage] = useState('');
   const [showNotification, setShowNotification] = useState(false);
   const [notificationEmphasis, setNotificationEmphasis] = useState(false);
@@ -157,6 +157,17 @@ const App = () => {
 
   // 批量删除确认对话框状态
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+
+  // 恢复状态
+  const [recoveryState, setRecoveryState] = useState({
+    isPaused: false,
+    pausedBatchId: null,
+    promptId: null,
+    pausedIndex: 0,
+    totalCount: 0,
+    savedParams: null,
+    reason: ''
+  });
 
   // 参考图片下拉菜单状态
   const [showRefImageMenu, setShowRefImageMenu] = useState({});
@@ -1013,6 +1024,88 @@ const App = () => {
     }
   };
 
+  // 暂停生成
+  const pauseGeneration = (reason) => {
+    // 将所有 generating 和 queue 状态的占位符标记为 paused
+    const generatingPlaceholders = imagePlaceholdersRef.current.filter(
+      p => ['queue', 'generating'].includes(p.status)
+    );
+
+    if (generatingPlaceholders.length === 0) return;
+
+    const firstPlaceholder = generatingPlaceholders[0];
+
+    updateImagePlaceholders(prev => prev.map(p =>
+      p.batchId === firstPlaceholder.batchId &&
+      ['queue', 'generating'].includes(p.status)
+        ? { ...p, status: 'paused' }
+        : p
+    ));
+
+    setRecoveryState({
+      isPaused: true,
+      pausedBatchId: firstPlaceholder.batchId,
+      promptId: firstPlaceholder.promptId || prompts[0]?.id,
+      pausedIndex: 0,  // 简化：重连后从头开始生成剩余部分
+      totalCount: generatingPlaceholders.length,
+      savedParams: firstPlaceholder.savedParams || null,
+      reason: reason
+    });
+
+    setIsGenerating(false);
+  };
+
+  // 继续生成
+  const handleContinueGeneration = async () => {
+    if (connectionStatus !== 'connected') {
+      alert('请先连接到 ComfyUI');
+      return;
+    }
+
+    // 将 paused 恢复为 queue
+    updateImagePlaceholders(prev => prev.map(p =>
+      p.batchId === recoveryState.pausedBatchId && p.status === 'paused'
+        ? { ...p, status: 'queue' }
+        : p
+    ));
+
+    setRecoveryState({
+      isPaused: false,
+      pausedBatchId: null,
+      promptId: null,
+      pausedIndex: 0,
+      totalCount: 0,
+      savedParams: null,
+      reason: ''
+    });
+
+    // 重新触发生成队列处理
+    processQueue();
+  };
+
+  // 取消剩余任务
+  const handleCancelRemaining = () => {
+    if (!confirm(`确定取消剩余 ${recoveryState.totalCount} 张图片的生成？`)) {
+      return;
+    }
+
+    // 删除所有 paused 状态的占位符
+    updateImagePlaceholders(prev =>
+      prev.filter(p => !(p.batchId === recoveryState.pausedBatchId && p.status === 'paused'))
+    );
+
+    setRecoveryState({
+      isPaused: false,
+      pausedBatchId: null,
+      promptId: null,
+      pausedIndex: 0,
+      totalCount: 0,
+      savedParams: null,
+      reason: ''
+    });
+    setIsGenerating(false);
+  };
+
   // 处理队列
   const processQueue = () => {
     if (generationQueueRef.current.length === 0) {
@@ -1312,6 +1405,20 @@ const App = () => {
 
     } catch (err) {
       console.error('批次生成错误:', err);
+
+      // 重置所有 batchId 对应的占位符为 failed
+      updateImagePlaceholders(prev => prev.map(p =>
+        p.batchId === batchId && p.status === 'generating'
+          ? { ...p, status: 'failed', error: err.message }
+          : p
+      ));
+
+      // 如果是连接错误，触发暂停
+      if (err.message.includes('WebSocket') || err.message.includes('连接') || err.message.includes('超时')) {
+        pauseGeneration(err.message);
+        return;  // 不再 throw，避免进一步错误处理
+      }
+
       throw err;
     }
   };
@@ -1533,8 +1640,23 @@ const App = () => {
 
       } catch (err) {
         console.error(`[generateLoop] 循环 ${i + 1} 错误:`, err);
+
+        // 重置当前占位符为 failed
+        updateImagePlaceholders(prev => prev.map(p =>
+          p.id === targetPlaceholder.id && p.status === 'generating'
+            ? { ...p, status: 'failed', error: err.message }
+            : p
+        ));
+
         if (ws) ws.close();
         if (timeoutId) clearTimeout(timeoutId);
+
+        // 如果是连接错误，触发暂停
+        if (err.message.includes('WebSocket') || err.message.includes('连接') || err.message.includes('超时')) {
+          pauseGeneration(err.message);
+          break;  // 中断循环
+        }
+
         throw err;
       }
     }
@@ -1790,8 +1912,23 @@ const App = () => {
 
       } catch (err) {
         console.error(`[generateWithRefImageLoop] 循环 ${i + 1} 错误:`, err);
+
+        // 重置当前占位符为 failed
+        updateImagePlaceholders(prev => prev.map(p =>
+          p.id === targetPlaceholder.id && p.status === 'generating'
+            ? { ...p, status: 'failed', error: err.message }
+            : p
+        ));
+
         if (ws) ws.close();
         if (timeoutId) clearTimeout(timeoutId);
+
+        // 如果是连接错误，触发暂停
+        if (err.message.includes('WebSocket') || err.message.includes('连接') || err.message.includes('超时')) {
+          pauseGeneration(err.message);
+          break;  // 中断循环
+        }
+
         throw err;
       }
     }
@@ -2315,13 +2452,29 @@ const App = () => {
       {/* 顶部连接状态通知 */}
       <div className={`connection-notification ${showNotification ? 'show' : ''} ${connectionStatus} ${notificationEmphasis ? 'emphasis' : ''}`}>
         <span className="notification-message">
-          {connectionStatus === 'checking' ? (
-            <>正在尝试重连<span className="loading-dots"></span></>
-          ) : connectionMessage}
+          {connectionStatus === 'checking' && (
+            <>正在检查连接<span className="loading-dots"></span></>
+          )}
+          {connectionStatus === 'reconnecting' && (
+            <>正在重连<span className="loading-dots"></span></>
+          )}
+          {connectionStatus === 'connected' && connectionMessage}
+          {connectionStatus === 'disconnected' && connectionMessage}
+          {connectionStatus === 'failed' && connectionMessage}
         </span>
-        {connectionStatus === 'disconnected' && (
+
+        {connectionStatus === 'reconnecting' && (
+          <button className="retry-link" onClick={() => {
+            setConnectionStatus('disconnected');
+            setShowNotification(false);
+          }}>
+            取消重连
+          </button>
+        )}
+
+        {(connectionStatus === 'disconnected' || connectionStatus === 'failed') && (
           <button className="retry-link" onClick={() => checkConnection()}>
-            重试连接
+            重新连接
           </button>
         )}
       </div>
@@ -3211,6 +3364,34 @@ const App = () => {
 
         {/* 右侧图片区域 */}
         <div className="images-section">
+          {/* 恢复对话框 */}
+          {recoveryState.isPaused && (
+            <div className="recovery-dialog-overlay">
+              <div className="recovery-dialog">
+                <h3>⏸ 生成已暂停</h3>
+                <p className="recovery-reason">原因: {recoveryState.reason}</p>
+                <p className="recovery-progress">剩余: {recoveryState.totalCount} 张图片</p>
+
+                <div className="recovery-actions">
+                  <button
+                    className="button-continue"
+                    onClick={handleContinueGeneration}
+                    disabled={connectionStatus !== 'connected'}
+                  >
+                    继续生成剩余 {recoveryState.totalCount} 张
+                    {connectionStatus !== 'connected' && ' (等待连接...)'}
+                  </button>
+                  <button
+                    className="button-cancel"
+                    onClick={handleCancelRemaining}
+                  >
+                    取消剩余任务
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 图像展示区域 - 骨架占位图 */}
           <div className="images-container" ref={imagesContainerRef}>
           {/* 控制栏 */}
@@ -3320,7 +3501,7 @@ const App = () => {
                 {imagePlaceholders.map((placeholder) => (
                   <div
                     key={placeholder.id}
-                    className={`image-placeholder ${isMultiSelectMode && placeholder.status === 'completed' ? 'multi-select-mode' : ''} ${selectedImages.has(placeholder.id) ? 'selected' : ''}`}
+                    className={`image-placeholder ${placeholder.status} ${isMultiSelectMode && placeholder.status === 'completed' ? 'multi-select-mode' : ''} ${selectedImages.has(placeholder.id) ? 'selected' : ''}`}
                     style={{ '--item-aspect-ratio': placeholder.aspectRatio || 1 }}
                   >
                     <div className={`skeleton ${placeholder.isNew ? 'skeleton-new' : ''} ${placeholder.isRemoving ? 'skeleton-removing' : ''}`}>
