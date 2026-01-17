@@ -59,8 +59,8 @@ export function setApiKey(key) {
 
 /**
  * 检查是否需要认证
- * 开发环境不需要认证
+ * 已禁用认证功能
  */
 export function isAuthRequired() {
-  return !isDevelopment;
+  return false;
 }
