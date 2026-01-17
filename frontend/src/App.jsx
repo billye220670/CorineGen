@@ -619,9 +619,11 @@ const App = () => {
       const result = await apiClient.checkConnection(3000);
 
       if (result.connected) {
+        const wasDisconnected = connectionStatus === 'disconnected' || connectionStatus === 'failed';
         setConnectionStatus('connected');
+
         if (!silent) {
-          setConnectionMessage('ComfyUI 连接成功，一切就绪');
+          setConnectionMessage(wasDisconnected ? '已重新连接到 ComfyUI' : 'ComfyUI 连接成功，一切就绪');
           setShowNotification(true);
           setTimeout(() => setShowNotification(false), 3000);
           fetchAvailableLoras(); // 连接成功后刷新LoRA列表
@@ -636,6 +638,12 @@ const App = () => {
         throw new Error(result.error || '连接失败');
       }
     } catch (error) {
+      // 如果正在生成，不显示连接失败（生成任务有自己的 WebSocket 连接）
+      if (isGenerating) {
+        console.warn('心跳检测失败，但生成任务正在进行中，忽略此错误');
+        return;
+      }
+
       stopHeartbeat();
       setConnectionStatus('disconnected');
       setConnectionMessage('无法连接到 ComfyUI，请确保服务已启动');
@@ -1256,6 +1264,15 @@ const App = () => {
 
           // execution_start 消息 - 任务开始执行（模型可能正在加载）
           if (type === 'execution_start') {
+            // 如果收到执行消息，说明连接是正常的，自动恢复连接状态
+            if (connectionStatus !== 'connected') {
+              setConnectionStatus('connected');
+              setConnectionMessage('已重新连接到 ComfyUI');
+              setShowNotification(true);
+              setTimeout(() => setShowNotification(false), 3000);
+              startHeartbeat();
+            }
+
             updateImagePlaceholders(prev => prev.map(p =>
               p.batchId === batchId && p.status === 'queue' ? {
                 ...p,
@@ -1266,6 +1283,15 @@ const App = () => {
 
           // 进度更新消息 - 批次模式下所有图片共享进度
           if (type === 'progress') {
+            // 如果收到进度消息，说明连接是正常的，自动恢复连接状态
+            if (connectionStatus !== 'connected') {
+              setConnectionStatus('connected');
+              setConnectionMessage('已重新连接到 ComfyUI');
+              setShowNotification(true);
+              setTimeout(() => setShowNotification(false), 3000);
+              startHeartbeat();
+            }
+
             const { value, max } = data;
             if (max > 0) {
               const progressPercent = Math.floor((value / max) * 100);
@@ -1490,6 +1516,15 @@ const App = () => {
 
               // execution_start 消息 - 任务开始执行（模型可能正在加载）
               if (type === 'execution_start') {
+                // 如果收到执行消息，说明连接是正常的，自动恢复连接状态
+                if (connectionStatus !== 'connected') {
+                  setConnectionStatus('connected');
+                  setConnectionMessage('已重新连接到 ComfyUI');
+                  setShowNotification(true);
+                  setTimeout(() => setShowNotification(false), 3000);
+                  startHeartbeat();
+                }
+
                 updateImagePlaceholders(prev => prev.map(p =>
                   p.id === targetPlaceholder.id && p.status === 'queue' ? {
                     ...p,
@@ -1500,6 +1535,15 @@ const App = () => {
 
               // 进度更新消息 - 更新当前图片的进度
               if (type === 'progress') {
+                // 如果收到进度消息，说明连接是正常的，自动恢复连接状态
+                if (connectionStatus !== 'connected') {
+                  setConnectionStatus('connected');
+                  setConnectionMessage('已重新连接到 ComfyUI');
+                  setShowNotification(true);
+                  setTimeout(() => setShowNotification(false), 3000);
+                  startHeartbeat();
+                }
+
                 const { value, max } = data;
                 if (max > 0) {
                   const progressPercent = Math.floor((value / max) * 100);
@@ -1749,6 +1793,15 @@ const App = () => {
 
               // execution_start 消息 - 任务开始执行
               if (type === 'execution_start') {
+                // 如果收到执行消息，说明连接是正常的，自动恢复连接状态
+                if (connectionStatus !== 'connected') {
+                  setConnectionStatus('connected');
+                  setConnectionMessage('已重新连接到 ComfyUI');
+                  setShowNotification(true);
+                  setTimeout(() => setShowNotification(false), 3000);
+                  startHeartbeat();
+                }
+
                 updateImagePlaceholders(prev => prev.map(p =>
                   p.id === targetPlaceholder.id && p.status === 'queue' ? {
                     ...p,
@@ -1762,6 +1815,15 @@ const App = () => {
                 const { value, max, node } = data;
                 // 只处理采样器节点的进度，忽略预处理器进度
                 if (max > 0 && node === '4') {
+                  // 如果收到进度消息，说明连接是正常的，自动恢复连接状态
+                  if (connectionStatus !== 'connected') {
+                    setConnectionStatus('connected');
+                    setConnectionMessage('已重新连接到 ComfyUI');
+                    setShowNotification(true);
+                    setTimeout(() => setShowNotification(false), 3000);
+                    startHeartbeat();
+                  }
+
                   const progressPercent = Math.floor((value / max) * 100);
                   updateImagePlaceholders(prev =>
                     prev.map(p =>
