@@ -20,7 +20,8 @@
       "Bash(git push:*)",
       "Bash(npm run build:*)",
       "Bash(git commit:*)",
-      "Bash(npx vite build --mode development)"
+      "Bash(npx vite build --mode development)",
+      "Bash(ls:*)"
     ]
   }
 }

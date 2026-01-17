@@ -5,22 +5,28 @@
 ## 项目概览
 
 **名称**: CorineGen - AI 图像生成器
-**类型**: React 单页应用 (SPA)
+**类型**: React 单页应用 (SPA) + Node.js 后端
 **用途**: ComfyUI 的 Web 前端界面，用于生成和管理 AI 图像
 **当前版本**: 1.0.0
 **主要语言**: JavaScript (JSX)
 
+## 架构
+
+```
+远端用户 ──> Vercel (前端) ──> 花生壳 ──> 本机后端 ──> ComfyUI
+```
+
 ## 技术栈
 
-### 核心框架
+### 前端 (frontend/)
 - **React 18.2.0** - UI 框架
 - **Vite 5.0.8** - 构建工具和开发服务器
 - **Lucide React 0.562.0** - 图标库
 
-### 后端集成
-- **ComfyUI API** - 运行在 `http://127.0.0.1:8188`
-  - REST API: 用于上传图片、获取系统状态、查询模型
-  - WebSocket: 用于实时进度推送
+### 后端 (backend/)
+- **Node.js + Express** - HTTP/WebSocket 代理服务器
+- **ws** - WebSocket 代理
+- **http-proxy-middleware** - HTTP 代理
 
 ### 数据持久化
 - **localStorage** - 保存用户设置、提示词、主题配置等
@@ -29,18 +35,47 @@
 
 ```
 CorineGen/
-├── src/
-│   ├── App.jsx          # 主应用组件 (1500+ 行)
-│   ├── App.css          # 主样式文件
-│   └── main.jsx         # React 入口
-├── public/              # 静态资源
-├── docs/                # 文档目录
-├── CorineGen.json       # ComfyUI 图像生成工作流
-├── ImageUpscaleAPI.json # ComfyUI 高清化工作流
-├── README.md            # 用户文档
-├── DEVELOPMENT.md       # 开发文档
-├── package.json         # 依赖配置
-└── vite.config.js       # Vite 配置
+├── frontend/                       # 前端 (Vercel 部署)
+│   ├── src/
+│   │   ├── main.jsx               # React 入口
+│   │   ├── App.jsx                # 主应用组件
+│   │   ├── App.css                # 主样式文件
+│   │   ├── config/
+│   │   │   └── api.js             # API 配置
+│   │   ├── adapters/              # 工作流适配器层
+│   │   │   ├── index.js           # 适配器注册
+│   │   │   ├── BaseAdapter.js     # 抽象基类
+│   │   │   ├── TextToImageAdapter.js
+│   │   │   ├── Image2ImageAdapter.js
+│   │   │   ├── ControlNetAdapter.js
+│   │   │   └── UpscaleAdapter.js
+│   │   ├── services/              # API 通信层
+│   │   │   ├── apiClient.js       # HTTP 客户端
+│   │   │   └── wsClient.js        # WebSocket 客户端
+│   │   └── workflows/             # 工作流模板
+│   │       ├── TextToImage.json
+│   │       ├── Image2Image.json
+│   │       ├── ControlNet.json
+│   │       └── Upscale.json
+│   ├── package.json
+│   ├── vite.config.js
+│   └── vercel.json
+│
+├── backend/                        # 后端 (本机部署)
+│   ├── src/
+│   │   ├── index.js               # Express 入口
+│   │   ├── middleware/
+│   │   │   └── auth.js            # API Key 认证
+│   │   └── proxy/
+│   │       └── wsProxy.js         # WebSocket 代理
+│   ├── package.json
+│   └── .env.example
+│
+├── docs/
+│   └── deployment.md              # 部署指南
+├── CLAUDE.md                      # AI 助手指南
+├── README.md                      # 用户文档
+└── DEVELOPMENT.md                 # 开发文档
 ```
 
 ## 核心功能模块

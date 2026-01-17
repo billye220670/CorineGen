@@ -1,5 +1,5 @@
 {
-  "name": "corinegen",
+  "name": "corinegen-frontend",
   "version": "1.0.0",
   "description": "ComfyUI Image Generator React App",
   "private": true,

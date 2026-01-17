@@ -2,21 +2,64 @@ import React, { useState, useRef, useEffect } from 'react';
 import Masonry from 'react-masonry-css';
 import { ClipboardPaste, ArrowRight, Image, Settings, Check, ImagePlus, ChevronDown, X } from 'lucide-react';
 import './App.css';
-import workflowTemplate from '../CorineGen.json';
-import upscaleTemplate from '../ImageUpscaleAPI.json';
-import image2imageTemplate from '../Image2ImageAPI.json';
-import controlnetTemplate from '../ZIT_CNN_API.json';
 
-const COMFYUI_API = 'http://127.0.0.1:8188';
-const COMFYUI_WS = 'ws://127.0.0.1:8188/ws';
+// 导入工作流模板（从新位置）
+import workflowTemplate from './workflows/TextToImage.json';
+import upscaleTemplate from './workflows/Upscale.json';
+import image2imageTemplate from './workflows/Image2Image.json';
+import controlnetTemplate from './workflows/ControlNet.json';
+
+// 导入服务层
+import { apiClient } from './services/apiClient.js';
+import { WsClient } from './services/wsClient.js';
+import { API_CONFIG, getApiKey, setApiKey, isAuthRequired } from './config/api.js';
 
 // 图生图/ControlNet 降噪强度默认值
 const DEFAULT_IMG2IMG_DENOISE = 1;
 
-// 生成唯一的客户端ID
-const generateClientId = () => {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+// 兼容层：基于 API_CONFIG 生成 API 地址
+// 用于渐进式迁移，避免一次性修改所有代码
+const COMFYUI_API = API_CONFIG.baseUrl + '/api';
+const COMFYUI_WS = API_CONFIG.wsUrl;
+
+// 生成 WebSocket URL（包含认证参数）
+const getWebSocketUrl = (clientId) => {
+  let url = `${COMFYUI_WS}/ws?clientId=${clientId}`;
+  if (isAuthRequired()) {
+    const apiKey = getApiKey();
+    if (apiKey) {
+      url += `&apiKey=${encodeURIComponent(apiKey)}`;
+    }
+  }
+  return url;
 };
+
+// 获取认证头
+const getAuthHeaders = () => {
+  const headers = {};
+  if (isAuthRequired()) {
+    const apiKey = getApiKey();
+    if (apiKey) {
+      headers['X-API-Key'] = apiKey;
+    }
+  }
+  return headers;
+};
+
+// 生成带认证的图片 URL
+const getImageUrl = (filename, subfolder = '', type = 'output') => {
+  let url = `${COMFYUI_API}/view?filename=${encodeURIComponent(filename)}&subfolder=${encodeURIComponent(subfolder)}&type=${type}&t=${Date.now()}`;
+  if (isAuthRequired()) {
+    const apiKey = getApiKey();
+    if (apiKey) {
+      url += `&apiKey=${encodeURIComponent(apiKey)}`;
+    }
+  }
+  return url;
+};
+
+// 生成唯一的客户端ID（使用 apiClient 中的方法）
+const generateClientId = () => apiClient.generateClientId();
 
 const App = () => {
   // 从localStorage加载保存的设置
@@ -526,10 +569,9 @@ const App = () => {
   // 获取可用的LoRA列表
   const fetchAvailableLoras = async () => {
     try {
-      const response = await fetch(`${COMFYUI_API}/object_info/LoraLoader`);
-      const data = await response.json();
-      if (data.LoraLoader?.input?.required?.lora_name?.[0]) {
-        setAvailableLoras(data.LoraLoader.input.required.lora_name[0]);
+      const loraList = await apiClient.getLoraList();
+      if (loraList && loraList.length > 0) {
+        setAvailableLoras(loraList);
       }
     } catch (error) {
       console.error('获取LoRA列表失败:', error);
@@ -563,34 +605,29 @@ const App = () => {
   const checkConnection = async (silent = false) => {
     if (!silent) setConnectionStatus('checking');
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const result = await apiClient.checkConnection(3000);
 
-      const response = await fetch(`${COMFYUI_API}/system_stats`, {
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
+      if (result.connected) {
         setConnectionStatus('connected');
         if (!silent) {
-          setConnectionMessage(`ComfyUI 正在 127.0.0.1:8188 运行，一切就绪`);
+          setConnectionMessage('ComfyUI 连接成功，一切就绪');
           setShowNotification(true);
           setTimeout(() => setShowNotification(false), 3000);
           fetchAvailableLoras(); // 连接成功后刷新LoRA列表
         }
         startHeartbeat();
+      } else if (result.authRequired) {
+        // 需要认证
+        setConnectionStatus('auth_required');
+        setConnectionMessage('请输入 API Key 进行认证');
+        setShowNotification(true);
       } else {
-        throw new Error('响应异常');
+        throw new Error(result.error || '连接失败');
       }
     } catch (error) {
       stopHeartbeat();
       setConnectionStatus('disconnected');
-      if (error.name === 'AbortError') {
-        setConnectionMessage('连接超时，请确保 ComfyUI 已启动');
-      } else {
-        setConnectionMessage('无法连接到 ComfyUI，请确保 ComfyUI 已启动');
-      }
+      setConnectionMessage('无法连接到 ComfyUI，请确保服务已启动');
       setShowNotification(true);
     }
   };
@@ -1103,7 +1140,7 @@ const App = () => {
       ));
 
       // 创建WebSocket连接
-      ws = new WebSocket(`${COMFYUI_WS}?clientId=${clientId}`);
+      ws = new WebSocket(getWebSocketUrl(clientId));
 
       ws.onopen = () => {};
 
@@ -1158,7 +1195,9 @@ const App = () => {
             // 当node为null时，表示执行完成
             if (node === null && prompt_id) {
               // 获取生成的图像
-              const historyResponse = await fetch(`${COMFYUI_API}/history/${prompt_id}`);
+              const historyResponse = await fetch(`${COMFYUI_API}/history/${prompt_id}`, {
+                headers: getAuthHeaders()
+              });
               const history = await historyResponse.json();
 
               if (history[prompt_id] && history[prompt_id].outputs) {
@@ -1172,7 +1211,7 @@ const App = () => {
                         filename: img.filename,
                         subfolder: img.subfolder,
                         type: img.type,
-                        url: `${COMFYUI_API}/view?filename=${img.filename}&subfolder=${img.subfolder}&type=${img.type}&t=${Date.now()}`,
+                        url: getImageUrl(img.filename, img.subfolder, img.type),
                       });
                     });
                   }
@@ -1250,6 +1289,7 @@ const App = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           prompt: workflow,
@@ -1318,7 +1358,7 @@ const App = () => {
         ));
 
         // 创建WebSocket连接
-        ws = new WebSocket(`${COMFYUI_WS}?clientId=${clientId}`);
+        ws = new WebSocket(getWebSocketUrl(clientId));
 
         await new Promise((resolve, reject) => {
           ws.onopen = () => {
@@ -1379,7 +1419,9 @@ const App = () => {
                   console.log('[generateLoop] 执行完成 - prompt_id:', prompt_id, 'targetPlaceholder:', targetPlaceholder.id);
 
                   // 获取生成的图像
-                  const historyResponse = await fetch(`${COMFYUI_API}/history/${prompt_id}`);
+                  const historyResponse = await fetch(`${COMFYUI_API}/history/${prompt_id}`, {
+                headers: getAuthHeaders()
+              });
                   const history = await historyResponse.json();
 
                   if (history[prompt_id] && history[prompt_id].outputs) {
@@ -1388,7 +1430,7 @@ const App = () => {
                     for (const nodeId in outputs) {
                       if (outputs[nodeId].images && outputs[nodeId].images[0]) {
                         const img = outputs[nodeId].images[0];
-                        const imageUrl = `${COMFYUI_API}/view?filename=${img.filename}&subfolder=${img.subfolder}&type=${img.type}&t=${Date.now()}`;
+                        const imageUrl = getImageUrl(img.filename, img.subfolder, img.type);
 
                         console.log('[generateLoop] 获取到图片 - filename:', img.filename, 'imageUrl:', imageUrl, '准备更新占位符:', targetPlaceholder.id);
 
@@ -1510,6 +1552,7 @@ const App = () => {
 
     const uploadResponse = await fetch(`${COMFYUI_API}/upload/image`, {
       method: 'POST',
+      headers: getAuthHeaders(),
       body: formData
     });
 
@@ -1559,7 +1602,7 @@ const App = () => {
         ));
 
         // 创建WebSocket连接
-        ws = new WebSocket(`${COMFYUI_WS}?clientId=${clientId}`);
+        ws = new WebSocket(getWebSocketUrl(clientId));
 
         await new Promise((resolve, reject) => {
           ws.onopen = () => {
@@ -1619,7 +1662,9 @@ const App = () => {
                   console.log('[generateWithRefImageLoop] 执行完成 - prompt_id:', prompt_id);
 
                   // 获取生成的图像
-                  const historyResponse = await fetch(`${COMFYUI_API}/history/${prompt_id}`);
+                  const historyResponse = await fetch(`${COMFYUI_API}/history/${prompt_id}`, {
+                headers: getAuthHeaders()
+              });
                   const history = await historyResponse.json();
 
                   if (history[prompt_id] && history[prompt_id].outputs) {
@@ -1645,7 +1690,7 @@ const App = () => {
                     const finalImage = savedImages[0] || previewImages[0];
 
                     if (finalImage) {
-                      const imageUrl = `${COMFYUI_API}/view?filename=${finalImage.filename}&subfolder=${finalImage.subfolder}&type=${finalImage.type}&t=${Date.now()}`;
+                      const imageUrl = getImageUrl(finalImage.filename, finalImage.subfolder, finalImage.type);
 
                       console.log('[generateWithRefImageLoop] 获取到图片:', finalImage.filename, 'type:', finalImage.type);
 
@@ -1722,7 +1767,10 @@ const App = () => {
         });
 
         if (!promptResponse.ok) {
-          throw new Error('提交任务失败');
+          const errorData = await promptResponse.json().catch(() => ({}));
+          console.error('[generateWithRefImageLoop] ComfyUI 错误响应:', errorData);
+          console.error('[generateWithRefImageLoop] 发送的工作流:', JSON.stringify(workflow, null, 2));
+          throw new Error(`提交任务失败: ${errorData.error || errorData.node_errors ? JSON.stringify(errorData.node_errors || errorData.error) : promptResponse.status}`);
         }
 
         // 设置超时
@@ -1866,7 +1914,7 @@ const App = () => {
       const workflow = buildUpscaleWorkflow(uploadedFilename);
 
       // 创建WebSocket连接并等待执行完成
-      ws = new WebSocket(`${COMFYUI_WS}?clientId=${clientId}`);
+      ws = new WebSocket(getWebSocketUrl(clientId));
 
       const executionPromise = new Promise((resolve, reject) => {
         ws.onopen = () => {};
@@ -1900,7 +1948,9 @@ const App = () => {
               // 当node为null时，表示执行完成
               if (node === null && prompt_id) {
                 // 获取生成的图像
-                const historyResponse = await fetch(`${COMFYUI_API}/history/${prompt_id}`);
+                const historyResponse = await fetch(`${COMFYUI_API}/history/${prompt_id}`, {
+                headers: getAuthHeaders()
+              });
                 const history = await historyResponse.json();
 
                 if (history[prompt_id] && history[prompt_id].outputs) {
@@ -1909,7 +1959,7 @@ const App = () => {
                   for (const nodeId in outputs) {
                     if (outputs[nodeId].images && outputs[nodeId].images[0]) {
                       const img = outputs[nodeId].images[0];
-                      const hqImageUrl = `${COMFYUI_API}/view?filename=${img.filename}&subfolder=${img.subfolder}&type=${img.type}&t=${Date.now()}`;
+                      const hqImageUrl = getImageUrl(img.filename, img.subfolder, img.type);
 
                       // 更新占位符，保存高清图片（不替换原图，以便用户切换清晰度）
                       updateImagePlaceholders(prev => prev.map(p =>
@@ -1960,6 +2010,7 @@ const App = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           prompt: workflow,
