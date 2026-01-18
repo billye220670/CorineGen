@@ -563,11 +563,20 @@ body {
   }
 }
 
+/* 标题容器 */
+.header-container {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
 .title {
   font-size: 2.5rem;
   font-weight: 700;
   text-align: center;
-  margin-bottom: 24px;
+  margin-bottom: 0;
   background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-accent) 50%, var(--theme-primary-light) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -586,11 +595,10 @@ body {
 .version-info {
   font-size: 0.75rem;
   color: #888;
-  margin-top: -16px;
-  margin-bottom: 12px;
-  text-align: center;
   user-select: none;
   opacity: 0.7;
+  align-self: flex-start;
+  margin-top: 8px;
 }
 
 /* 浅色模式下按钮文字变深色 */

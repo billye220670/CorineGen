@@ -1301,6 +1301,16 @@ const App = () => {
         setIsGenerating(false);
       };
 
+      // 监听WebSocket异常关闭
+      ws.onclose = (event) => {
+        // 1000 是正常关闭，其他都是异常
+        if (event.code !== 1000 && event.code !== 1005) {
+          console.error('WebSocket异常关闭:', event.code, event.reason);
+          // 触发暂停机制
+          pauseGeneration('WebSocket连接断开');
+        }
+      };
+
       // 监听WebSocket消息
       ws.onmessage = async (event) => {
         try {
@@ -1553,6 +1563,15 @@ const App = () => {
           ws.onerror = (error) => {
             console.error('WebSocket错误:', error);
             reject(new Error('WebSocket连接失败'));
+          };
+
+          // 监听WebSocket异常关闭
+          ws.onclose = (event) => {
+            // 1000 是正常关闭，其他都是异常
+            if (event.code !== 1000 && event.code !== 1005) {
+              console.error('WebSocket异常关闭:', event.code, event.reason);
+              reject(new Error('WebSocket连接断开'));
+            }
           };
 
           // 监听WebSocket消息
@@ -1831,6 +1850,15 @@ const App = () => {
           ws.onerror = (error) => {
             console.error('WebSocket错误:', error);
             reject(new Error('WebSocket连接失败'));
+          };
+
+          // 监听WebSocket异常关闭
+          ws.onclose = (event) => {
+            // 1000 是正常关闭，其他都是异常
+            if (event.code !== 1000 && event.code !== 1005) {
+              console.error('WebSocket异常关闭:', event.code, event.reason);
+              reject(new Error('WebSocket连接断开'));
+            }
           };
 
           // 监听WebSocket消息
@@ -2826,8 +2854,10 @@ const App = () => {
           )}
         </div>
 
-        <h1 className="title">CorineGen</h1>
-        <div className="version-info">v{APP_VERSION}</div>
+        <div className="header-container">
+          <h1 className="title">CorineGen</h1>
+          <div className="version-info">v{APP_VERSION}</div>
+        </div>
 
         <div className="form">
           {/* 提示词列表 */}
