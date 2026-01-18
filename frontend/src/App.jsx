@@ -15,7 +15,7 @@ import { WsClient } from './services/wsClient.js';
 import { API_CONFIG, getApiKey, setApiKey, isAuthRequired } from './config/api.js';
 
 // 应用版本号
-const APP_VERSION = '1.1.1';  // 修复布局和断开恢复
+const APP_VERSION = '1.1.2';  // 修复重连和恢复卡住
 
 // 图生图/ControlNet 降噪强度默认值
 const DEFAULT_IMG2IMG_DENOISE = 1;
@@ -694,6 +694,11 @@ const App = () => {
       setConnectionStatus('disconnected');
       setConnectionMessage('无法连接到 ComfyUI，请确保服务已启动');
       setShowNotification(true);
+
+      // 如果不是静默检查，3秒后自动隐藏横幅
+      if (!silent) {
+        setTimeout(() => setShowNotification(false), 3000);
+      }
     }
   };
 
@@ -1094,7 +1099,12 @@ const App = () => {
     updateImagePlaceholders(prev => prev.map(p =>
       p.batchId === firstPlaceholder.batchId &&
       ['queue', 'generating'].includes(p.status)
-        ? { ...p, status: 'paused' }
+        ? {
+            ...p,
+            status: 'paused',
+            isLoading: false,  // 重置加载状态
+            progress: 0  // 重置进度
+          }
         : p
     ));
 
