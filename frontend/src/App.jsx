@@ -14,6 +14,9 @@ import { apiClient } from './services/apiClient.js';
 import { WsClient } from './services/wsClient.js';
 import { API_CONFIG, getApiKey, setApiKey, isAuthRequired } from './config/api.js';
 
+// 应用版本号
+const APP_VERSION = '1.1.0';
+
 // 图生图/ControlNet 降噪强度默认值
 const DEFAULT_IMG2IMG_DENOISE = 1;
 
@@ -174,6 +177,7 @@ const App = () => {
 
   const firstSeedRef = useRef(null);
   const heartbeatRef = useRef(null); // 心跳检测定时器
+  const heartbeatFailCountRef = useRef(0); // 心跳失败计数
   const longPressTimerRef = useRef(null); // 长按计时器
   const longPressTriggeredRef = useRef(false); // 长按是否已触发
   const imageInputRefs = useRef({}); // 图片上传input的refs
@@ -612,6 +616,27 @@ const App = () => {
     setTimeout(() => setNotificationEmphasis(false), 600);
   };
 
+  // 检查是否有任何活跃的生成或加载活动
+  const hasActiveGenerationActivity = () => {
+    const placeholders = imagePlaceholdersRef.current;
+
+    // 检查是否有正在生成、加载或揭示的占位符
+    const hasActiveTask = placeholders.some(p =>
+      ['queue', 'generating', 'revealing'].includes(p.status) ||
+      (p.status === 'queue' && p.isLoading)
+    );
+
+    // 检查是否有正在加载的图片（completed 但可能还在加载）
+    const hasLoadingImages = placeholders.some(p =>
+      p.status === 'completed' && p.imageUrl && !p.imageLoadError
+    );
+
+    // 检查是否有恢复对话框打开
+    const hasRecoveryDialog = recoveryState.isPaused;
+
+    return hasActiveTask || hasLoadingImages || hasRecoveryDialog;
+  };
+
   // 检测ComfyUI连接状态
   const checkConnection = async (silent = false) => {
     if (!silent) setConnectionStatus('checking');
@@ -621,6 +646,9 @@ const App = () => {
       if (result.connected) {
         const wasDisconnected = connectionStatus === 'disconnected' || connectionStatus === 'failed';
         setConnectionStatus('connected');
+
+        // 连接成功，重置心跳失败计数
+        heartbeatFailCountRef.current = 0;
 
         if (!silent) {
           setConnectionMessage(wasDisconnected ? '已重新连接到 ComfyUI' : 'ComfyUI 连接成功，一切就绪');
@@ -644,11 +672,23 @@ const App = () => {
         throw new Error(result.error || '连接失败');
       }
     } catch (error) {
-      // 如果正在生成，不显示连接失败（生成任务有自己的 WebSocket 连接）
-      if (isGenerating) {
-        console.warn('心跳检测失败，但生成任务正在进行中，忽略此错误');
+      // 更精确的检测：不仅检查 isGenerating，还要检查实际的占位符状态
+      if (hasActiveGenerationActivity()) {
+        console.warn('心跳检测失败，但有活跃的生成/加载活动，暂不显示错误横幅');
+
+        // 记录失败次数，连续失败 3 次才真正警告
+        heartbeatFailCountRef.current++;
+
+        if (heartbeatFailCountRef.current >= 3) {
+          // 连续 3 次失败（15 秒），确实有问题
+          console.error('心跳连续 3 次失败，可能真的断开了，但由于有活跃任务，仍不显示横幅');
+          // 但仍然不显示横幅，让 WebSocket 的错误处理来接管
+        }
         return;
       }
+
+      // 重置失败计数
+      heartbeatFailCountRef.current = 0;
 
       stopHeartbeat();
       setConnectionStatus('disconnected');
@@ -2787,6 +2827,7 @@ const App = () => {
         </div>
 
         <h1 className="title">CorineGen</h1>
+        <div className="version-info">v{APP_VERSION}</div>
 
         <div className="form">
           {/* 提示词列表 */}
