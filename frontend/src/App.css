@@ -543,6 +543,11 @@ body {
     grid-column: 1 / -1;
   }
 
+  /* 标题容器也需要跨越所有列 */
+  .header-container {
+    grid-column: 1 / -1;
+  }
+
   .form {
     margin-bottom: 0;
   }
