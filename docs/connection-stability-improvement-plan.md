@@ -512,15 +512,26 @@ const APP_VERSION = '1.1.0';
 
 **问题描述**:
 - 版本号显示在标题下方，打乱了 PC 端页面布局
+- **第二次问题**: PC 端变成上下布局，左右分栏失效
+
+**根本原因**:
+- `.header-container` 在宽屏布局中没有设置 `grid-column: 1 / -1`
+- 导致 grid 布局被破坏，左右分栏失效
 
 **修复方案**:
 - 添加 `.header-container` 容器使用 flexbox 布局
 - 版本号显示在标题右侧
 - 使用 `align-items: baseline` 对齐基线
+- **在宽屏布局中添加 `grid-column: 1 / -1` 让容器跨越所有列**
 
 **修改文件**:
 - `frontend/src/App.jsx` (行 2829-2832)
-- `frontend/src/App.css` (行 566-602)
+- `frontend/src/App.css` (行 566-602, 547-549)
+
+**修复后行为**:
+- PC 端：左侧配置面板 (500px)，右侧生图面板 (1fr)
+- 标题"CorineGen v1.1.0"跨越所有列，居中显示
+- 移动端：保持上下布局
 
 ---
 
