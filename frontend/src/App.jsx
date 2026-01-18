@@ -15,7 +15,7 @@ import { WsClient } from './services/wsClient.js';
 import { API_CONFIG, getApiKey, setApiKey, isAuthRequired } from './config/api.js';
 
 // 应用版本号
-const APP_VERSION = '1.1.2';  // 修复重连和恢复卡住
+const APP_VERSION = '1.1.3';  // 修复继续生成卡queue
 
 // 图生图/ControlNet 降噪强度默认值
 const DEFAULT_IMG2IMG_DENOISE = 1;
@@ -1135,6 +1135,9 @@ const App = () => {
         : p
     ));
 
+    const { promptId, pausedBatchId, savedParams } = recoveryState;
+
+    // 清除恢复状态
     setRecoveryState({
       isPaused: false,
       pausedBatchId: null,
@@ -1145,8 +1148,16 @@ const App = () => {
       reason: ''
     });
 
-    // 重新触发生成队列处理
-    processQueue();
+    // 找到对应的提示词
+    const prompt = prompts.find(p => p.id === promptId);
+    if (!prompt) {
+      console.error('未找到对应的提示词');
+      return;
+    }
+
+    // 直接调用 generateForPrompt 继续生成，传入 batchId
+    setIsGenerating(true);
+    generateForPrompt(promptId, prompt.text, pausedBatchId);
   };
 
   // 取消剩余任务

@@ -1,6 +1,6 @@
 # CorineGen 连接稳定性全面改进计划
 
-**当前版本**: v1.1.2
+**当前版本**: v1.1.3
 
 ---
 
@@ -20,6 +20,7 @@
 
 | 版本 | 日期 | 说明（≤10字） | 提交哈希 |
 |------|------|---------------|----------|
+| v1.1.3 | 2026-01-18 | 修复继续生成卡queue | (待提交) |
 | v1.1.2 | 2026-01-18 | 修复重连和恢复卡住 | c77b00d |
 | v1.1.1 | 2026-01-18 | 修复布局和断开恢复 | 5e2523f |
 | v1.1.0 | 2026-01-18 | 智能横幅和版本显示 | 63ff85f |
@@ -701,6 +702,37 @@ const APP_VERSION = '1.1.0';
 **测试要求**:
 - 后端下线，点击"重新连接" → 3秒后横幅消失
 - 后端下线，等后端上线后点击"继续生成" → 正常从下一张继续
+
+---
+
+### Bug #4: 继续生成时队列卡在 queue (已修复 - 2026-01-18)
+
+**问题描述**:
+- 后端重新上线后，点击"继续生成剩余的x张"
+- 所有剩余的占位符（包括断开时正在处理的那张）都无限卡在 `queue` 状态
+- 队列不会被处理
+
+**根本原因**:
+- `handleContinueGeneration()` 调用的是 `processQueue()`
+- `processQueue()` 处理的是**提示词队列**（`generationQueueRef.current`），而不是占位符
+- 当断开恢复时，`generationQueueRef.current` 是空的（当前批次已在处理中）
+- `processQueue()` 发现队列为空，直接 return，设置 `isGenerating = false`
+- 占位符变成 `queue` 但没有被实际处理
+
+**修复方案**:
+- `handleContinueGeneration()` 不再调用 `processQueue()`
+- 而是**直接调用 `generateForPrompt()`** 继续当前批次
+- 从 `recoveryState` 获取 `promptId`、`pausedBatchId`、`savedParams`
+- 找到对应的提示词对象，获取 `promptText`
+- 直接调用 `generateForPrompt(promptId, prompt.text, pausedBatchId)`
+
+**修改文件**:
+- `frontend/src/App.jsx` (行 1124-1161)
+
+**修复后行为**:
+- 点击"继续生成" → 直接继续当前批次的生成
+- 占位符从 `queue` 正常开始处理
+- 队列不会卡住
 
 ---
 
