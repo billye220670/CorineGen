@@ -49,7 +49,7 @@ const PRESET_MODES = [
 const PROMPT_ASSISTANT_PLACEHOLDERS = {
   variation: '输入提示词，使用 # 标记需要变化的部分，@ 后跟 0-1 的权重，() 内写特殊偏好\n例如: a girl, #wearing red dress@0.8(prefer blue tones)',
   polish: '输入提示词，使用 [] 或 【】 标记需要扩写的部分，... 的数量表示扩写程度\n例如: a girl, [wearing dress......], standing in the garden',
-  continue: '输入当前分镜的提示词，AI 将为你设计下一个分镜场景',
+  continue: '输入当前分镜的提示词，AI 将为你设计下一个分镜场景\n可选：使用 [] 或 【】 包裹内容来指定希望的剧情发展走向',
   script: '输入故事大纲或情节描述，AI 将生成完整的分镜提示词\n可选：指定需要的分镜数量'
 };
 
