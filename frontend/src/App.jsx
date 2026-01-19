@@ -4362,7 +4362,7 @@ const App = () => {
                 </div>
 
                 {/* 特殊字符指南 - 永远显示 */}
-                {(assistantMode === 'variation' || assistantMode === 'polish') && (
+                {(assistantMode === 'variation' || assistantMode === 'polish' || assistantMode === 'continue') && (
                   <div className="prompt-assistant-guide">
                     {assistantMode === 'variation' && (
                       <>
@@ -4389,6 +4389,17 @@ const App = () => {
                         </div>
                         <p className="guide-example">
                           例: a girl, [wearing dress......], standing in [garden..]
+                        </p>
+                      </>
+                    )}
+                    {assistantMode === 'continue' && (
+                      <>
+                        <p className="guide-title">💡 特殊字符（可选）：</p>
+                        <div className="guide-content">
+                          <span><strong>[]</strong> 或 <strong>【】</strong> 指定剧情走向</span>
+                        </div>
+                        <p className="guide-example">
+                          例: 少女站在森林边缘，[她发现了一只受伤的小鹿]
                         </p>
                       </>
                     )}
