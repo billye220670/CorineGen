@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Masonry from 'react-masonry-css';
-import { ClipboardPaste, ArrowRight, Image, Settings, Check, ImagePlus, ChevronDown, X } from 'lucide-react';
+import { ClipboardPaste, ArrowRight, Image, Settings, Check, ImagePlus, ChevronDown, X, Wand2 } from 'lucide-react';
 import './App.css';
 
 // 导入工作流模板（从新位置）
@@ -13,6 +13,7 @@ import controlnetTemplate from './workflows/ControlNet.json';
 import { apiClient } from './services/apiClient.js';
 import { WsClient } from './services/wsClient.js';
 import { API_CONFIG, getApiKey, setApiKey, isAuthRequired } from './config/api.js';
+import { generatePrompt } from './services/promptAssistantApi.js';
 
 // 应用版本号
 const APP_VERSION = '1.1.4';  // 修复后端未完全启动时继续生成卡queue
@@ -151,6 +152,15 @@ const App = () => {
   );
   const [showPresetDropdown, setShowPresetDropdown] = useState(false);
   const [showNewPresetPanel, setShowNewPresetPanel] = useState(false);
+
+  // 提示词助理状态
+  const [promptAssistantOpen, setPromptAssistantOpen] = useState(false); // Modal 显示状态
+  const [assistantMode, setAssistantMode] = useState('variation'); // 当前模式
+  const [assistantInput, setAssistantInput] = useState(''); // 输入内容
+  const [assistantResults, setAssistantResults] = useState([]); // 生成结果
+  const [selectedResultIndex, setSelectedResultIndex] = useState(0); // 选中的结果索引
+  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false); // 生成中
+  const [assistantError, setAssistantError] = useState(null); // 错误信息
   const [newPresetName, setNewPresetName] = useState('');
   const [hoveredPresetId, setHoveredPresetId] = useState(null);
 
@@ -341,6 +351,18 @@ const App = () => {
   useEffect(() => {
     recoveryStateRef.current = recoveryState;
   }, [recoveryState]);
+
+  // ESC 键关闭提示词助理 Modal
+  useEffect(() => {
+    const handleEscKey = (e) => {
+      if (e.key === 'Escape' && promptAssistantOpen) {
+        setPromptAssistantOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleEscKey);
+    return () => window.removeEventListener('keydown', handleEscKey);
+  }, [promptAssistantOpen]);
 
   // 获取当前所有预设参数的快照
   const getCurrentSettingsSnapshot = () => ({
@@ -3018,6 +3040,20 @@ const App = () => {
                     </>
                   )}
 
+                  {/* 魔法棒按钮 - 提示词助理入口 */}
+                  <button
+                    className="prompt-assistant-button"
+                    onClick={() => {
+                      // 打开 Modal 时自动填充当前提示词
+                      setAssistantInput(promptItem.text);
+                      setPromptAssistantOpen(true);
+                    }}
+                    disabled={!connected || isGenerating}
+                    title="提示词助理 - AI 优化提示词"
+                  >
+                    <Wand2 size={16} />
+                  </button>
+
                   {/* 参考图片缩略图和下拉菜单 */}
                   {promptItem.refImage && (
                     <div className="ref-image-container">
@@ -4114,6 +4150,39 @@ const App = () => {
               >
                 保存
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 提示词助理 Modal */}
+      {promptAssistantOpen && (
+        <div
+          className="prompt-assistant-backdrop"
+          onClick={() => setPromptAssistantOpen(false)}
+        >
+          <div
+            className="prompt-assistant-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 关闭按钮 */}
+            <button
+              className="prompt-assistant-close"
+              onClick={() => setPromptAssistantOpen(false)}
+              title="关闭"
+            >
+              <X size={20} />
+            </button>
+
+            {/* Modal 标题 */}
+            <div className="prompt-assistant-header">
+              <h2>✨ 提示词助理</h2>
+              <p className="prompt-assistant-subtitle">使用 AI 优化和生成提示词</p>
+            </div>
+
+            {/* Modal 内容 */}
+            <div className="prompt-assistant-content">
+              <p>Modal 内容开发中...</p>
             </div>
           </div>
         </div>

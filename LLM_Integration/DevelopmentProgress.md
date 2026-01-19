@@ -48,9 +48,9 @@
 ## Phase 1: 后端基础搭建 (预计 2 天)
 
 ### 1.1 环境配置
-- [ ] 获取 JieKou AI API Key ⚠️ **需要用户提供**
+- [✅] 获取 JieKou AI API Key
 - [✅] 配置 backend/.env 环境变量
-  - [✅] GROK_API_KEY (已添加占位符)
+  - [✅] GROK_API_KEY
   - [✅] GROK_API_BASE_URL
   - [✅] GROK_MODEL
   - [✅] GROK_RATE_LIMIT_PER_MINUTE
@@ -60,7 +60,7 @@
   - [✅] `npm install express-rate-limit --save`
 
 **完成时间**: 2026-01-19
-**备注**: 环境变量已配置占位符，等待用户提供真实 API Key
+**备注**: 用户已提供 API Key，环境配置完成
 
 ### 1.2 创建后端文件结构
 - [✅] 创建 `backend/src/config/grokConfig.js`
@@ -212,13 +212,13 @@ script 模式: [✅ 成功] - 12.9s，生成 4 个分镜，人物一致，故事
 ## Phase 2: 前端基础开发 (预计 3 天)
 
 ### 2.1 前端准备工作
-- [ ] 确认 lucide-react 依赖已安装
-- [ ] 创建前端 API 客户端
-  - [ ] 创建 `frontend/src/services/promptAssistantApi.js`
-  - [ ] 实现 `generatePrompt(mode, input)` 方法
+- [✅] 确认 lucide-react 依赖已安装
+- [✅] 创建前端 API 客户端
+  - [✅] 创建 `frontend/src/services/promptAssistantApi.js`
+  - [✅] 实现 `generatePrompt(mode, input)` 方法
 
-**完成时间**: _________
-**备注**: _________
+**完成时间**: 2026-01-20
+**备注**: API 客户端已创建，包含详细错误处理和用户友好的错误消息
 
 ### 2.2 设计 UI 组件结构
 - [ ] 规划组件层级
@@ -236,16 +236,22 @@ script 模式: [✅ 成功] - 12.9s，生成 4 个分镜，人物一致，故事
 **备注**: _________
 
 ### 2.3 实现魔法棒入口按钮
-- [ ] 在提示词输入框左下角添加按钮
-- [ ] 使用 `Wand2` 图标（lucide-react）
-- [ ] 添加 Tooltip "提示词助理"
-- [ ] 设置按钮状态（禁用条件）
-  - [ ] `disabled={!connected || isGenerating}`
-- [ ] 绑定点击事件 `onClick={() => setPromptAssistantOpen(true)}`
-- [ ] 添加样式
+- [✅] 在提示词输入框左下角添加按钮
+- [✅] 使用 `Wand2` 图标（lucide-react）
+- [✅] 添加 Tooltip "提示词助理"
+- [✅] 设置按钮状态（禁用条件）
+  - [✅] `disabled={!connected || isGenerating}`
+- [✅] 绑定点击事件 `onClick={() => setPromptAssistantOpen(true)}`
+- [✅] 添加样式
 
-**完成时间**: _________
-**备注**: _________
+**完成时间**: 2026-01-20
+**备注**:
+- 按钮已添加到 App.jsx:3032-3043
+- CSS 样式已添加到 App.css:894-930
+- 打开 Modal 时自动填充当前提示词
+- 禁用状态样式（opacity: 0.3）
+- 悬停时主题色高亮
+- 状态管理已添加（7 个 state 变量）
 
 ### 🔍 检查点 2.1: 入口按钮确认
 **需要用户确认:**
@@ -257,22 +263,28 @@ script 模式: [✅ 成功] - 12.9s，生成 4 个分镜，人物一致，故事
 **备注**: _________
 
 ### 2.4 创建提示词助理 Modal
-- [ ] 实现 Modal 容器
-  - [ ] 遮罩层 (backdrop)
-  - [ ] Modal 主体 (800x600px)
-  - [ ] 关闭按钮 (X)
-- [ ] 添加打开/关闭动画
-  - [ ] 淡入淡出效果
-- [ ] 实现关闭逻辑
-  - [ ] 点击 X 按钮关闭
-  - [ ] 点击遮罩层关闭
-  - [ ] ESC 键关闭
-- [ ] 主题适配
-  - [ ] 使用 CSS 变量
-  - [ ] 测试不同主题色
+- [✅] 实现 Modal 容器
+  - [✅] 遮罩层 (backdrop)
+  - [✅] Modal 主体 (800x600px)
+  - [✅] 关闭按钮 (X)
+- [✅] 添加打开/关闭动画
+  - [✅] 淡入淡出效果
+- [✅] 实现关闭逻辑
+  - [✅] 点击 X 按钮关闭
+  - [✅] 点击遮罩层关闭
+  - [✅] ESC 键关闭
+- [✅] 主题适配
+  - [✅] 使用 CSS 变量
+  - [✅] 测试不同主题色
 
-**完成时间**: _________
-**备注**: _________
+**完成时间**: 2026-01-20
+**备注**:
+- Modal 已添加到 App.jsx:4146-4177
+- CSS 样式已添加到 App.css:3040-3195 (156行)
+- 实现了 fadeIn 和 modalSlideIn 动画
+- ESC 键监听器已添加 (App.jsx:355-365)
+- 支持响应式设计 (移动端全屏)
+- 完整的浅色/深色主题支持
 
 ### 2.5 实现 Tab 切换功能
 - [ ] 创建 Tab 数据结构
