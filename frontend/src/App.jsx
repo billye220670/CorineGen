@@ -4264,14 +4264,8 @@ const App = () => {
 
       {/* 提示词助理 Modal */}
       {promptAssistantOpen && (
-        <div
-          className="prompt-assistant-backdrop"
-          onClick={() => setPromptAssistantOpen(false)}
-        >
-          <div
-            className="prompt-assistant-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="prompt-assistant-backdrop">
+          <div className="prompt-assistant-modal">
             {/* 关闭按钮 */}
             <button
               className="prompt-assistant-close"
@@ -4316,35 +4310,34 @@ const App = () => {
                   {assistantInput.length} 字符
                 </div>
 
-                {/* 特殊字符指南 - 仅在输入为空且为特定模式时显示 */}
-                {!assistantInput && (assistantMode === 'variation' || assistantMode === 'polish') && (
+                {/* 特殊字符指南 - 永远显示 */}
+                {(assistantMode === 'variation' || assistantMode === 'polish') && (
                   <div className="prompt-assistant-guide">
                     {assistantMode === 'variation' && (
                       <>
-                        <p className="guide-title">💡 使用特殊字符增强控制：</p>
-                        <ul className="guide-list">
-                          <li><strong>#</strong> 标记需要变化的内容</li>
-                          <li><strong>@</strong> 后跟 0-1 的数字表示变化程度 (0.8 = 80%变化)</li>
-                          <li><strong>()</strong> 内写特殊偏好说明</li>
-                        </ul>
+                        <p className="guide-title">💡 特殊字符：</p>
+                        <div className="guide-content">
+                          <span><strong>#</strong> 标记变化内容</span>
+                          <span><strong>@0-1</strong> 变化程度</span>
+                          <span><strong>()</strong> 偏好说明</span>
+                        </div>
                         <p className="guide-example">
-                          例如: a girl, #wearing red dress@0.8(prefer blue tones)
+                          例: a girl, #wearing red dress@0.8(prefer blue tones)
                         </p>
                       </>
                     )}
                     {assistantMode === 'polish' && (
                       <>
-                        <p className="guide-title">💡 使用特殊字符控制扩写：</p>
-                        <ul className="guide-list">
-                          <li><strong>[]</strong> 或 <strong>【】</strong> 标记需要扩写的部分</li>
-                          <li><strong>...</strong> 的数量表示扩写程度</li>
-                          <li>• <strong>.</strong> - 轻微扩写 (1-2 个细节)</li>
-                          <li>• <strong>..</strong> - 适度扩写 (3-5 个细节)</li>
-                          <li>• <strong>...</strong> - 中等扩写 (5-8 个细节)</li>
-                          <li>• <strong>....</strong> - 深度扩写 (8+ 个细节)</li>
-                        </ul>
+                        <p className="guide-title">💡 特殊字符：</p>
+                        <div className="guide-content">
+                          <span><strong>[]</strong> 标记扩写部分</span>
+                          <span><strong>.</strong> 轻微</span>
+                          <span><strong>..</strong> 适度</span>
+                          <span><strong>...</strong> 中等</span>
+                          <span><strong>....</strong> 深度</span>
+                        </div>
                         <p className="guide-example">
-                          例如: a girl, [wearing dress......], standing in the [garden..]
+                          例: a girl, [wearing dress......], standing in [garden..]
                         </p>
                       </>
                     )}
