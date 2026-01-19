@@ -21,6 +21,30 @@ const APP_VERSION = '1.1.4';  // 修复后端未完全启动时继续生成卡qu
 // 图生图/ControlNet 降噪强度默认值
 const DEFAULT_IMG2IMG_DENOISE = 1;
 
+// 提示词助理模式配置
+const PRESET_MODES = [
+  {
+    id: 'variation',
+    label: '创建变体',
+    tooltip: '生成 3-5 个提示词变体，使用 # @ () 控制变化'
+  },
+  {
+    id: 'polish',
+    label: '扩写润色',
+    tooltip: '智能扩充提示词细节，使用 [] ... 控制扩写程度'
+  },
+  {
+    id: 'continue',
+    label: '脑补后续',
+    tooltip: '根据当前分镜设计下一个场景，保持连贯性'
+  },
+  {
+    id: 'script',
+    label: '生成剧本',
+    tooltip: '根据故事大纲生成 4-8 个完整分镜'
+  }
+];
+
 // 兼容层：基于 API_CONFIG 生成 API 地址
 // 用于渐进式迁移，避免一次性修改所有代码
 const COMFYUI_API = API_CONFIG.baseUrl + '/api';
@@ -4180,9 +4204,24 @@ const App = () => {
               <p className="prompt-assistant-subtitle">使用 AI 优化和生成提示词</p>
             </div>
 
+            {/* Tab 切换器 */}
+            <div className="prompt-assistant-tabs">
+              {PRESET_MODES.map(mode => (
+                <button
+                  key={mode.id}
+                  className={`prompt-assistant-tab ${assistantMode === mode.id ? 'active' : ''}`}
+                  onClick={() => setAssistantMode(mode.id)}
+                  title={mode.tooltip}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+
             {/* Modal 内容 */}
             <div className="prompt-assistant-content">
-              <p>Modal 内容开发中...</p>
+              <p>内容区域开发中...</p>
+              <p>当前模式: {assistantMode}</p>
             </div>
           </div>
         </div>
