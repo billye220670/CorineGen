@@ -3591,6 +3591,67 @@ body {
   color: rgba(30, 30, 30, 0.9);
 }
 
+/* 带有+按钮的结果卡片 */
+.result-card-with-action {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: hsla(var(--theme-hue), 15%, 18%, 0.6);
+  border: 2px solid hsla(var(--theme-hue), 15%, 30%, 0.4);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.result-card-with-action:hover {
+  background: hsla(var(--theme-hue), 15%, 20%, 0.8);
+  border-color: hsla(var(--theme-hue), 15%, 40%, 0.6);
+}
+
+.light-mode .result-card-with-action {
+  background: hsla(var(--theme-hue), 15%, 98%, 1);
+  border-color: hsla(var(--theme-hue), 15%, 85%, 0.8);
+}
+
+.light-mode .result-card-with-action:hover {
+  background: white;
+  border-color: hsla(var(--theme-hue), 15%, 70%, 1);
+}
+
+/* +按钮样式 */
+.result-add-button {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: var(--theme-primary);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 20px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.result-add-button:hover {
+  background: hsla(var(--theme-hue), var(--theme-saturation), calc(var(--theme-lightness) + 10%), 1);
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px hsla(var(--theme-hue), var(--theme-saturation), var(--theme-lightness), 0.4);
+}
+
+.result-add-button:active {
+  transform: scale(0.95);
+}
+
+.light-mode .result-add-button {
+  color: white;
+}
+
 /* 应用按钮 */
 .prompt-assistant-apply-button {
   width: 100%;

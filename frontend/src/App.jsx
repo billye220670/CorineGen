@@ -2856,6 +2856,46 @@ const App = () => {
     setPromptAssistantOpen(false);
   };
 
+  // 添加带文本的提示词到主界面
+  const addPromptWithText = (text) => {
+    if (prompts.length >= 10) {
+      alert('最多只能添加 10 个提示词');
+      return;
+    }
+
+    setPrompts([...prompts, {
+      id: nextPromptId.current++,
+      text: text,
+      isGenerating: false
+    }]);
+
+    console.log(`[Prompt Assistant] 添加新提示词: ${text.slice(0, 50)}...`);
+  };
+
+  // 下载分镜脚本
+  const downloadScript = () => {
+    if (assistantResults.length === 0) return;
+
+    // 生成txt内容
+    let content = '# 分镜脚本\n\n';
+    assistantResults.forEach((prompt, index) => {
+      content += `## 分镜 ${index + 1}\n${prompt}\n\n`;
+    });
+
+    // 创建Blob并下载
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `分镜脚本_${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    console.log(`[Prompt Assistant] 下载分镜脚本，共 ${assistantResults.length} 个分镜`);
+  };
+
   return (
     <div className={`app ${themeBgLightness > 40 ? 'light-mode' : ''}`} style={{
       '--theme-hue': themeHue,
@@ -4382,43 +4422,88 @@ const App = () => {
                       </div>
                     )}
 
-                    {/* 结果列表 */}
-                    {!isGeneratingPrompt && assistantResults.length > 0 && (
+                    {/* variation 模式：多个变体，每个有+按钮 */}
+                    {!isGeneratingPrompt && assistantResults.length > 0 && assistantMode === 'variation' && (
                       <div className="prompt-assistant-results-list">
                         <p className="results-header">
-                          生成了 {assistantResults.length} 个结果，选择一个应用：
+                          生成了 {assistantResults.length} 个变体，点击"+"添加到提示词列表：
                         </p>
                         {assistantResults.map((result, index) => (
-                          <label
-                            key={index}
-                            className={`result-card ${selectedResultIndex === index ? 'selected' : ''}`}
-                          >
-                            <input
-                              type="radio"
-                              name="prompt-result"
-                              checked={selectedResultIndex === index}
-                              onChange={() => setSelectedResultIndex(index)}
-                            />
+                          <div key={index} className="result-card-with-action">
                             <div className="result-content">
                               <span className="result-number">#{index + 1}</span>
                               <p className="result-text">{result}</p>
                             </div>
-                          </label>
+                            <button
+                              className="result-add-button"
+                              onClick={() => addPromptWithText(result)}
+                              title="添加到提示词列表"
+                            >
+                              +
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* polish 和 continue 模式：单个结果，有+按钮 */}
+                    {!isGeneratingPrompt && assistantResults.length > 0 && (assistantMode === 'polish' || assistantMode === 'continue') && (
+                      <div className="prompt-assistant-results-list">
+                        <p className="results-header">
+                          {assistantMode === 'polish' ? '扩写润色结果：' : '后续分镜提示词：'}
+                        </p>
+                        <div className="result-card-with-action">
+                          <div className="result-content">
+                            <p className="result-text">{assistantResults[0]}</p>
+                          </div>
+                          <button
+                            className="result-add-button"
+                            onClick={() => addPromptWithText(assistantResults[0])}
+                            title="添加到提示词列表"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* script 模式：多个分镜，每个有+按钮 */}
+                    {!isGeneratingPrompt && assistantResults.length > 0 && assistantMode === 'script' && (
+                      <div className="prompt-assistant-results-list">
+                        <p className="results-header">
+                          生成了 {assistantResults.length} 个分镜，点击"+"添加到提示词列表：
+                        </p>
+                        {assistantResults.map((result, index) => (
+                          <div key={index} className="result-card-with-action">
+                            <div className="result-content">
+                              <span className="result-number">分镜 {index + 1}</span>
+                              <p className="result-text">{result}</p>
+                            </div>
+                            <button
+                              className="result-add-button"
+                              onClick={() => addPromptWithText(result)}
+                              title="添加到提示词列表"
+                            >
+                              +
+                            </button>
+                          </div>
                         ))}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* 应用按钮（固定底部） - 只在有结果时显示 */}
+                {/* 底部按钮（固定底部） - 只在有结果时显示 */}
                 {!isGeneratingPrompt && assistantResults.length > 0 && (
                   <div className="prompt-assistant-apply-section">
-                    <button
-                      className="prompt-assistant-apply-button"
-                      onClick={handlePromptApply}
-                    >
-                      应用选中的提示词
-                    </button>
+                    {assistantMode === 'script' ? (
+                      <button
+                        className="prompt-assistant-apply-button"
+                        onClick={downloadScript}
+                      >
+                        下载分镜脚本
+                      </button>
+                    ) : null}
                   </div>
                 )}
               </div>
