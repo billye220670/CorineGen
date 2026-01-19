@@ -3155,7 +3155,7 @@ const App = () => {
                       setAssistantInput(promptItem.text);
                       setPromptAssistantOpen(true);
                     }}
-                    disabled={!connected || isGenerating}
+                    disabled={connectionStatus !== 'connected' || isGenerating}
                     title="提示词助理 - AI 优化提示词"
                   >
                     <Wand2 size={16} />
