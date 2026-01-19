@@ -187,10 +187,10 @@ const App = () => {
 
   // 提示词助理状态
   const [promptAssistantOpen, setPromptAssistantOpen] = useState(false); // Modal 显示状态
-  const [assistantMode, setAssistantMode] = useState('variation'); // 当前模式
-  const [assistantInput, setAssistantInput] = useState(''); // 输入内容
-  const [assistantResults, setAssistantResults] = useState([]); // 生成结果
-  const [selectedResultIndex, setSelectedResultIndex] = useState(0); // 选中的结果索引
+  const [assistantMode, setAssistantMode] = useState(() => loadFromStorage('corineGen_assistantMode', 'variation'));
+  const [assistantInput, setAssistantInput] = useState(() => loadFromStorage('corineGen_assistantInput', ''));
+  const [assistantResults, setAssistantResults] = useState(() => loadFromStorage('corineGen_assistantResults', []));
+  const [selectedResultIndex, setSelectedResultIndex] = useState(() => loadFromStorage('corineGen_selectedResultIndex', 0));
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false); // 生成中
   const [assistantError, setAssistantError] = useState(null); // 错误信息
   const [newPresetName, setNewPresetName] = useState('');
@@ -395,6 +395,23 @@ const App = () => {
     window.addEventListener('keydown', handleEscKey);
     return () => window.removeEventListener('keydown', handleEscKey);
   }, [promptAssistantOpen]);
+
+  // 提示词助理状态持久化
+  useEffect(() => {
+    localStorage.setItem('corineGen_assistantMode', JSON.stringify(assistantMode));
+  }, [assistantMode]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_assistantInput', JSON.stringify(assistantInput));
+  }, [assistantInput]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_assistantResults', JSON.stringify(assistantResults));
+  }, [assistantResults]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_selectedResultIndex', JSON.stringify(selectedResultIndex));
+  }, [selectedResultIndex]);
 
   // 获取当前所有预设参数的快照
   const getCurrentSettingsSnapshot = () => ({
@@ -2781,6 +2798,64 @@ const App = () => {
     setBatchDownloadPrefix('');
   };
 
+  // ==================== 提示词助理相关函数 ====================
+
+  // 生成提示词
+  const handlePromptGenerate = async () => {
+    if (!assistantInput.trim()) {
+      return;
+    }
+
+    setIsGeneratingPrompt(true);
+    setAssistantError(null);
+    setAssistantResults([]);
+
+    try {
+      console.log(`[Prompt Assistant] 开始生成，模式: ${assistantMode}`);
+
+      const response = await generatePrompt(assistantMode, assistantInput.trim());
+
+      if (response.success && response.data) {
+        setAssistantResults(response.data);
+        setSelectedResultIndex(0); // 默认选中第一个
+        console.log(`[Prompt Assistant] 生成成功，返回 ${response.data.length} 个结果`);
+      } else {
+        throw new Error('生成失败：返回数据格式错误');
+      }
+    } catch (error) {
+      console.error('[Prompt Assistant] 生成失败:', error);
+      setAssistantError(error.message || '生成失败，请稍后重试');
+
+      // 3 秒后自动清除错误
+      setTimeout(() => {
+        setAssistantError(null);
+      }, 3000);
+    } finally {
+      setIsGeneratingPrompt(false);
+    }
+  };
+
+  // 应用选中的提示词
+  const handlePromptApply = () => {
+    if (assistantResults.length === 0) {
+      return;
+    }
+
+    const selectedPrompt = assistantResults[selectedResultIndex];
+
+    // 找到当前 focus 的提示词，如果没有则使用第一个
+    const targetPromptId = focusedPromptId || prompts[0]?.id;
+
+    if (targetPromptId) {
+      // 更新提示词
+      updatePromptText(targetPromptId, selectedPrompt);
+      console.log(`[Prompt Assistant] 应用提示词到 ID: ${targetPromptId}`);
+    }
+
+    // 关闭 Modal
+    setPromptAssistantOpen(false);
+  };
+
   return (
     <div className={`app ${themeBgLightness > 40 ? 'light-mode' : ''}`} style={{
       '--theme-hue': themeHue,
@@ -4280,16 +4355,23 @@ const App = () => {
               {/* 生成按钮 */}
               <button
                 className="prompt-assistant-generate-button"
-                onClick={() => alert('生成功能开发中')}
+                onClick={handlePromptGenerate}
                 disabled={!assistantInput.trim() || isGeneratingPrompt}
               >
                 {isGeneratingPrompt ? '生成中...' : '生成'}
               </button>
 
+              {/* 错误提示 */}
+              {assistantError && (
+                <div className="prompt-assistant-error">
+                  ⚠️ {assistantError}
+                </div>
+              )}
+
               {/* 结果预览区域 */}
               <div className="prompt-assistant-results">
                 {/* 空状态 - 没有结果 */}
-                {!isGeneratingPrompt && assistantResults.length === 0 && (
+                {!isGeneratingPrompt && assistantResults.length === 0 && !assistantError && (
                   <div className="prompt-assistant-empty-state">
                     <p className="empty-state-text">点击"生成"按钮获取 AI 优化建议</p>
                   </div>
@@ -4334,7 +4416,7 @@ const App = () => {
               {!isGeneratingPrompt && assistantResults.length > 0 && (
                 <button
                   className="prompt-assistant-apply-button"
-                  onClick={() => alert('应用功能开发中')}
+                  onClick={handlePromptApply}
                 >
                   应用选中的提示词
                 </button>

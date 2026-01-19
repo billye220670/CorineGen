@@ -3381,6 +3381,23 @@ body {
   cursor: not-allowed;
 }
 
+/* 错误提示 */
+.prompt-assistant-error {
+  padding: 12px 16px;
+  background: hsla(0, 70%, 50%, 0.15);
+  border: 1px solid hsla(0, 70%, 50%, 0.4);
+  border-radius: 6px;
+  color: hsla(0, 70%, 60%, 1);
+  font-size: 14px;
+  animation: fadeIn 0.3s ease;
+}
+
+.light-mode .prompt-assistant-error {
+  background: hsla(0, 70%, 50%, 0.08);
+  border-color: hsla(0, 70%, 50%, 0.3);
+  color: hsla(0, 70%, 45%, 1);
+}
+
 /* 结果预览区域 */
 .prompt-assistant-results {
   flex: 1;

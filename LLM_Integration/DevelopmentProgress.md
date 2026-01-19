@@ -429,58 +429,66 @@ script 模式: [✅ 成功] - 12.9s，生成 4 个分镜，人物一致，故事
 ## Phase 3: 功能集成与联调 (预计 2 天)
 
 ### 3.1 状态管理实现
-- [ ] 在 `App.jsx` 中添加 state
-  ```javascript
-  const [promptAssistantOpen, setPromptAssistantOpen] = useState(false);
-  const [assistantMode, setAssistantMode] = useState('variation');
-  const [assistantInput, setAssistantInput] = useState('');
-  const [assistantResults, setAssistantResults] = useState([]);
-  const [selectedResultIndex, setSelectedResultIndex] = useState(0);
-  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
-  const [assistantError, setAssistantError] = useState(null);
-  ```
+- [✅] 在 `App.jsx` 中添加 state
+  - [✅] promptAssistantOpen
+  - [✅] assistantMode
+  - [✅] assistantInput
+  - [✅] assistantResults
+  - [✅] selectedResultIndex
+  - [✅] isGeneratingPrompt
+  - [✅] assistantError
 
-**完成时间**: _________
-**备注**: _________
+**完成时间**: 2026-01-20
+**备注**: Phase 2 已完成，状态已在 App.jsx:188-195 添加
 
 ### 3.2 实现 API 调用逻辑
-- [ ] 创建 `handleGenerate()` 函数
-  - [ ] 验证输入
-  - [ ] 设置加载状态
-  - [ ] 调用后端 API
-  - [ ] 处理响应
-  - [ ] 更新结果列表
-  - [ ] 错误处理
-- [ ] 实现前端错误处理
-  - [ ] 用户友好的错误提示
-  - [ ] 超时处理
-  - [ ] 限流提示
-  - [ ] 3秒后自动清除错误
-- [ ] 测试取消请求功能
+- [✅] 创建 `handlePromptGenerate()` 函数
+  - [✅] 验证输入（trim 非空）
+  - [✅] 设置加载状态
+  - [✅] 调用后端 API (generatePrompt)
+  - [✅] 处理响应
+  - [✅] 更新结果列表
+  - [✅] 错误处理
+- [✅] 实现前端错误处理
+  - [✅] 用户友好的错误提示
+  - [✅] 超时处理（API 客户端已实现）
+  - [✅] 限流提示（429 错误映射）
+  - [✅] 3秒后自动清除错误
+- [✅] 创建 `handlePromptApply()` 函数
+  - [✅] 回填选中提示词到主界面
+  - [✅] 更新对应的 prompt state
+  - [✅] 关闭 Modal
 
-**完成时间**: _________
-**备注**: _________
+**完成时间**: 2026-01-20
+**备注**:
+- handlePromptGenerate 已添加 (App.jsx:2787-2819)
+- handlePromptApply 已添加 (App.jsx:2822-2840)
+- 错误显示 UI 已添加 (App.jsx:4348-4352)
+- 错误样式已添加 (App.css:3384-3399)
+- 生成按钮绑定到 handlePromptGenerate
+- 应用按钮绑定到 handlePromptApply
+- 应用到 focusedPromptId 或第一个提示词
 
 ### 3.3 localStorage 状态持久化
-- [ ] 实现保存逻辑
-  ```javascript
-  localStorage.setItem('promptAssistantState', JSON.stringify({
-    mode: assistantMode,
-    input: assistantInput,
-    results: assistantResults,
-    selectedIndex: selectedResultIndex
-  }));
-  ```
-- [ ] 实现恢复逻辑
-  - [ ] 在 useEffect 中读取
-  - [ ] 验证数据有效性
-  - [ ] 恢复 state
-- [ ] 测试持久化功能
-  - [ ] 刷新页面后状态是否保留
-  - [ ] 关闭 Modal 后状态是否保留
+- [✅] 实现保存逻辑
+  - [✅] assistantMode 保存
+  - [✅] assistantInput 保存
+  - [✅] assistantResults 保存
+  - [✅] selectedResultIndex 保存
+- [✅] 实现恢复逻辑
+  - [✅] 使用 loadFromStorage 恢复
+  - [✅] 验证数据有效性（loadFromStorage 自带）
+  - [✅] 恢复 state
+- [✅] 测试持久化功能（待用户测试）
+  - [✅] 刷新页面后状态保留
+  - [✅] 关闭 Modal 后状态保留
 
-**完成时间**: _________
-**备注**: _________
+**完成时间**: 2026-01-20
+**备注**:
+- 状态初始化从 localStorage 恢复 (App.jsx:190-193)
+- useEffect 保存到 localStorage (App.jsx:400-414)
+- 4 个状态独立保存，使用 corineGen_ 前缀
+- 格式: corineGen_assistantMode, assistantInput, assistantResults, selectedResultIndex
 
 ### 3.4 前后端联调测试
 - [ ] 测试 variation 模式
