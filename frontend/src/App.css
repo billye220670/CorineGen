@@ -3065,9 +3065,9 @@ body {
 
 /* Modal 主体 */
 .prompt-assistant-modal {
-  width: 800px;
+  width: 1000px;
   max-width: 90vw;
-  height: 600px;
+  height: 650px;
   max-height: 85vh;
   background: hsl(var(--theme-hue), 15%, 12%);
   border-radius: 12px;
@@ -3222,24 +3222,55 @@ body {
   color: var(--theme-primary);
 }
 
-/* Modal 内容 */
+/* Modal 内容 - 左右布局 */
 .prompt-assistant-content {
   flex: 1;
   padding: 24px;
-  overflow-y: auto;
   display: flex;
-  flex-direction: column;
-  gap: 20px;
+  gap: 24px;
+  overflow: hidden; /* 父容器不滚动 */
 }
 
-/* 输入框区域 */
-.prompt-assistant-input-section {
+/* 左边：输入区 */
+.prompt-assistant-left {
+  flex: 0 0 45%; /* 固定左边宽度 45% */
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   position: relative;
+}
+
+/* 右边：结果区 */
+.prompt-assistant-right {
+  flex: 1; /* 右边占据剩余空间 */
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+}
+
+/* 结果列表容器（可滚动） */
+.prompt-assistant-results-container {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+/* 应用按钮区域（固定底部） */
+.prompt-assistant-apply-section {
+  flex-shrink: 0;
+  padding-top: 16px;
+  border-top: 1px solid hsla(var(--theme-hue), 15%, 25%, 0.5);
+}
+
+.light-mode .prompt-assistant-apply-section {
+  border-top-color: hsla(var(--theme-hue), 15%, 80%, 0.8);
 }
 
 .prompt-assistant-textarea {
   width: 100%;
-  min-height: 140px;
+  min-height: 200px;
+  max-height: 300px;
   padding: 16px;
   background: hsla(var(--theme-hue), 15%, 18%, 0.8);
   border: 1px solid hsla(var(--theme-hue), 15%, 30%, 0.5);
@@ -3279,12 +3310,11 @@ body {
 
 /* 字符计数 */
 .prompt-assistant-char-count {
-  position: absolute;
-  bottom: 8px;
-  right: 12px;
+  text-align: right;
+  margin-top: -8px;
+  margin-bottom: 0;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.4);
-  pointer-events: none;
 }
 
 .light-mode .prompt-assistant-char-count {
@@ -3293,7 +3323,6 @@ body {
 
 /* 特殊字符指南 */
 .prompt-assistant-guide {
-  margin-top: 12px;
   padding: 10px 12px;
   background: hsla(var(--theme-hue), var(--theme-saturation), var(--theme-lightness), 0.08);
   border-left: 3px solid var(--theme-primary);
@@ -3404,10 +3433,9 @@ body {
 
 /* 结果预览区域 */
 .prompt-assistant-results {
-  flex: 1;
-  min-height: 100px;
   display: flex;
   flex-direction: column;
+  gap: 12px;
 }
 
 /* 空状态 */
@@ -3415,8 +3443,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 48px 24px;
-  flex: 1;
+  padding: 80px 24px;
+  min-height: 200px;
 }
 
 .empty-state-text {
@@ -3436,8 +3464,8 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 48px 24px;
-  flex: 1;
+  padding: 80px 24px;
+  min-height: 200px;
   gap: 16px;
 }
 
@@ -3584,10 +3612,32 @@ body {
 }
 
 /* 响应式设计 */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .prompt-assistant-modal {
     width: 95vw;
     height: 90vh;
+  }
+
+  /* 小屏幕时切换为纵向布局 */
+  .prompt-assistant-content {
+    flex-direction: column;
+    overflow-y: auto;
+    gap: 20px;
+  }
+
+  .prompt-assistant-left {
+    flex: none;
+    width: 100%;
+  }
+
+  .prompt-assistant-right {
+    flex: none;
+    width: 100%;
+    min-height: 300px;
+  }
+
+  .prompt-assistant-results-container {
+    max-height: 400px;
   }
 }
 

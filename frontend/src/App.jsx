@@ -4295,16 +4295,17 @@ const App = () => {
               ))}
             </div>
 
-            {/* Modal 内容 */}
+            {/* Modal 内容 - 左右布局 */}
             <div className="prompt-assistant-content">
-              {/* 输入框区域 */}
-              <div className="prompt-assistant-input-section">
+              {/* 左边：输入区 */}
+              <div className="prompt-assistant-left">
+                {/* 输入框 */}
                 <textarea
                   className="prompt-assistant-textarea"
                   value={assistantInput}
                   onChange={(e) => setAssistantInput(e.target.value)}
                   placeholder={PROMPT_ASSISTANT_PLACEHOLDERS[assistantMode]}
-                  rows={6}
+                  rows={10}
                 />
                 <div className="prompt-assistant-char-count">
                   {assistantInput.length} 字符
@@ -4343,77 +4344,84 @@ const App = () => {
                     )}
                   </div>
                 )}
-              </div>
 
-              {/* 生成按钮 */}
-              <button
-                className="prompt-assistant-generate-button"
-                onClick={handlePromptGenerate}
-                disabled={!assistantInput.trim() || isGeneratingPrompt}
-              >
-                {isGeneratingPrompt ? '生成中...' : '生成'}
-              </button>
-
-              {/* 错误提示 */}
-              {assistantError && (
-                <div className="prompt-assistant-error">
-                  ⚠️ {assistantError}
-                </div>
-              )}
-
-              {/* 结果预览区域 */}
-              <div className="prompt-assistant-results">
-                {/* 空状态 - 没有结果 */}
-                {!isGeneratingPrompt && assistantResults.length === 0 && !assistantError && (
-                  <div className="prompt-assistant-empty-state">
-                    <p className="empty-state-text">点击"生成"按钮获取 AI 优化建议</p>
-                  </div>
-                )}
-
-                {/* 加载状态 */}
-                {isGeneratingPrompt && (
-                  <div className="prompt-assistant-loading">
-                    <div className="loading-spinner"></div>
-                    <p className="loading-text">AI 正在思考中...</p>
-                  </div>
-                )}
-
-                {/* 结果列表 */}
-                {!isGeneratingPrompt && assistantResults.length > 0 && (
-                  <div className="prompt-assistant-results-list">
-                    <p className="results-header">
-                      生成了 {assistantResults.length} 个结果，选择一个应用：
-                    </p>
-                    {assistantResults.map((result, index) => (
-                      <label
-                        key={index}
-                        className={`result-card ${selectedResultIndex === index ? 'selected' : ''}`}
-                      >
-                        <input
-                          type="radio"
-                          name="prompt-result"
-                          checked={selectedResultIndex === index}
-                          onChange={() => setSelectedResultIndex(index)}
-                        />
-                        <div className="result-content">
-                          <span className="result-number">#{index + 1}</span>
-                          <p className="result-text">{result}</p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* 应用按钮 - 只在有结果时显示 */}
-              {!isGeneratingPrompt && assistantResults.length > 0 && (
+                {/* 生成按钮 */}
                 <button
-                  className="prompt-assistant-apply-button"
-                  onClick={handlePromptApply}
+                  className="prompt-assistant-generate-button"
+                  onClick={handlePromptGenerate}
+                  disabled={!assistantInput.trim() || isGeneratingPrompt}
                 >
-                  应用选中的提示词
+                  {isGeneratingPrompt ? '生成中...' : '生成'}
                 </button>
-              )}
+
+                {/* 错误提示 */}
+                {assistantError && (
+                  <div className="prompt-assistant-error">
+                    ⚠️ {assistantError}
+                  </div>
+                )}
+              </div>
+
+              {/* 右边：结果区 */}
+              <div className="prompt-assistant-right">
+                {/* 结果列表容器（可滚动） */}
+                <div className="prompt-assistant-results-container">
+                  <div className="prompt-assistant-results">
+                    {/* 空状态 - 没有结果 */}
+                    {!isGeneratingPrompt && assistantResults.length === 0 && !assistantError && (
+                      <div className="prompt-assistant-empty-state">
+                        <p className="empty-state-text">点击"生成"按钮获取 AI 优化建议</p>
+                      </div>
+                    )}
+
+                    {/* 加载状态 */}
+                    {isGeneratingPrompt && (
+                      <div className="prompt-assistant-loading">
+                        <div className="loading-spinner"></div>
+                        <p className="loading-text">AI 正在思考中...</p>
+                      </div>
+                    )}
+
+                    {/* 结果列表 */}
+                    {!isGeneratingPrompt && assistantResults.length > 0 && (
+                      <div className="prompt-assistant-results-list">
+                        <p className="results-header">
+                          生成了 {assistantResults.length} 个结果，选择一个应用：
+                        </p>
+                        {assistantResults.map((result, index) => (
+                          <label
+                            key={index}
+                            className={`result-card ${selectedResultIndex === index ? 'selected' : ''}`}
+                          >
+                            <input
+                              type="radio"
+                              name="prompt-result"
+                              checked={selectedResultIndex === index}
+                              onChange={() => setSelectedResultIndex(index)}
+                            />
+                            <div className="result-content">
+                              <span className="result-number">#{index + 1}</span>
+                              <p className="result-text">{result}</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 应用按钮（固定底部） - 只在有结果时显示 */}
+                {!isGeneratingPrompt && assistantResults.length > 0 && (
+                  <div className="prompt-assistant-apply-section">
+                    <button
+                      className="prompt-assistant-apply-button"
+                      onClick={handlePromptApply}
+                    >
+                      应用选中的提示词
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
