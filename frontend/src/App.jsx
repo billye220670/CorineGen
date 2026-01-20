@@ -4362,7 +4362,7 @@ const App = () => {
                 </div>
 
                 {/* 特殊字符指南 - 永远显示 */}
-                {(assistantMode === 'variation' || assistantMode === 'polish' || assistantMode === 'continue') && (
+                {(assistantMode === 'variation' || assistantMode === 'polish' || assistantMode === 'continue' || assistantMode === 'script') && (
                   <div className="prompt-assistant-guide">
                     {assistantMode === 'variation' && (
                       <>
@@ -4373,7 +4373,7 @@ const App = () => {
                           <span><strong>()</strong> 偏好说明</span>
                         </div>
                         <p className="guide-example">
-                          例: a girl, #wearing red dress@0.8(prefer blue tones)
+                          例: 少女，#穿着红色连衣裙@0.8(希望蓝色调)，站在花园里
                         </p>
                       </>
                     )}
@@ -4388,7 +4388,7 @@ const App = () => {
                           <span><strong>....</strong> 深度</span>
                         </div>
                         <p className="guide-example">
-                          例: a girl, [wearing dress......], standing in [garden..]
+                          例: 少女，[穿着裙子......]，站在[花园..]里
                         </p>
                       </>
                     )}
@@ -4400,6 +4400,18 @@ const App = () => {
                         </div>
                         <p className="guide-example">
                           例: 少女站在森林边缘，[她发现了一只受伤的小鹿]
+                        </p>
+                      </>
+                    )}
+                    {assistantMode === 'script' && (
+                      <>
+                        <p className="guide-title">💡 提示：</p>
+                        <div className="guide-content">
+                          <span>输入故事大纲或情节描述</span>
+                          <span>可选：指定需要的分镜数量</span>
+                        </div>
+                        <p className="guide-example">
+                          例: 一个少女在森林中迷路，遇到了一只会说话的狐狸，狐狸带她找到了回家的路。请生成 4 个分镜。
                         </p>
                       </>
                     )}
