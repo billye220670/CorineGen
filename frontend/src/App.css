@@ -3254,6 +3254,14 @@ body {
   flex: 1;
   overflow-y: auto;
   padding-right: 8px;
+  /* 隐藏滚动条 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+/* 隐藏 WebKit 浏览器滚动条 */
+.prompt-assistant-results-container::-webkit-scrollbar {
+  display: none;
 }
 
 /* 应用按钮区域（固定底部） */
@@ -3281,6 +3289,14 @@ body {
   resize: vertical;
   font-family: inherit;
   transition: all 0.2s ease;
+  /* 隐藏滚动条 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+/* 隐藏 WebKit 浏览器滚动条 */
+.prompt-assistant-textarea::-webkit-scrollbar {
+  display: none;
 }
 
 .prompt-assistant-textarea:focus {
