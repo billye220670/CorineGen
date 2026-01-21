@@ -253,7 +253,6 @@ const App = () => {
   // 会话管理 ref
   const sessionIdRef = useRef(`sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
   const submittedTasksRef = useRef([]); // 已提交任务列表，用于恢复时查询状态
-  const nextBatchIdRef = useRef(nextBatchId.current); // 批次计数器的 ref 引用
 
   // 平滑滚动到图片容器底部
   const scrollToBottom = () => {
@@ -446,7 +445,7 @@ const App = () => {
         placeholders: imagePlaceholdersRef.current,
         isGenerating,
         recoveryState,
-        nextBatchId: nextBatchIdRef.current,
+        nextBatchId: nextBatchId.current,
         submittedTasks: submittedTasksRef.current
       };
 
@@ -1339,7 +1338,6 @@ const App = () => {
     setGenerationQueue(restoredSession.queue);
 
     // 4. 恢复批次计数器
-    nextBatchIdRef.current = restoredSession.nextBatchId;
     nextBatchId.current = restoredSession.nextBatchId;
     sessionIdRef.current = restoredSession.sessionId;
 
@@ -1348,7 +1346,19 @@ const App = () => {
 
     // 6. 查询已提交但可能未完成的任务状态
     const submittedTasks = restoredSession.submittedTasks || [];
+
+    // 提取已完成占位符的ID集合，用于去重
+    const completedPlaceholderIds = new Set(completedPlaceholders.map(p => p.id));
+
     for (const task of submittedTasks) {
+      // 检查这个任务的占位符是否已经在 completedPlaceholders 中
+      const alreadyCompleted = task.placeholderIds.some(id => completedPlaceholderIds.has(id));
+
+      if (alreadyCompleted) {
+        console.log(`[会话恢复] 任务 ${task.promptId} 的占位符已存在，跳过`);
+        continue; // 跳过已存在的占位符
+      }
+
       if (task.status === 'pending') {
         try {
           const historyResponse = await fetch(
@@ -1371,9 +1381,9 @@ const App = () => {
                 console.log(`[会话恢复] 任务 ${task.promptId} 已完成，添加 ${images.length} 张图片`);
 
                 // 为这些图片创建新的占位符（使用新的 batchId 避免冲突）
-                const newBatchId = nextBatchIdRef.current++;
+                const newBatchId = nextBatchId.current++;
                 const newPlaceholders = images.map((img, index) => {
-                  // 从原始占位符中找到对应的参数
+                  // 从原始占位符中找到对应的参数（应该从 incompletePlaceholders 中找）
                   const originalPlaceholder = incompletePlaceholders.find(
                     p => task.placeholderIds.includes(p.id)
                   );
