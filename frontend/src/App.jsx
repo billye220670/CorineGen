@@ -1418,8 +1418,11 @@ const App = () => {
     const restoredPlaceholders = restoredSession.placeholders.map(p => {
       if (p.status === 'completed') {
         return p; // 已完成的保持不变
+      } else if (p.status === 'queue') {
+        // queue 状态保持不变，等待继续执行
+        return p;
       } else {
-        // 未完成的（loading、generating、queue）设为 recovering 状态
+        // loading、generating 状态设为 recovering（需要轮询恢复）
         return {
           ...p,
           status: 'recovering',  // 新状态：恢复中
