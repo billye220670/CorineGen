@@ -73,7 +73,9 @@ export class SessionManager {
       hqFilename: p.hqFilename,
       savedParams: p.savedParams,
       imageLoadError: p.imageLoadError,
-      imageRetryCount: p.imageRetryCount
+      imageRetryCount: p.imageRetryCount,
+      upscaleStatus: p.upscaleStatus,  // 保存高清化状态
+      upscaleProgress: p.upscaleProgress  // 保存高清化进度
     }));
 
     return {
@@ -210,7 +212,9 @@ export class SessionManager {
           displayQuality: img.displayQuality,
           hqImageUrl: img.hqImageUrl,
           hqFilename: img.hqFilename,
-          savedParams: img.savedParams
+          savedParams: img.savedParams,
+          upscaleStatus: img.upscaleStatus,
+          upscaleProgress: img.upscaleProgress
         }))
       };
     });

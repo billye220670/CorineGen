@@ -1426,23 +1426,31 @@ const App = () => {
     });
 
     const restoredPlaceholders = restoredSession.placeholders.map(p => {
+      // 确保所有恢复的占位符都有 upscaleStatus 和 upscaleProgress（兼容旧数据）
+      const baseProps = {
+        upscaleStatus: p.upscaleStatus || 'none',
+        upscaleProgress: p.upscaleProgress || 0
+      };
+
       if (p.status === 'completed') {
-        return p; // 已完成的保持不变
+        return { ...p, ...baseProps }; // 已完成的保持不变，但添加默认值
       } else if (pendingPlaceholderIds.has(p.id)) {
         // 属于 pending 的 submittedTask，设为 recovering（包括同批次的所有图片）
         return {
           ...p,
+          ...baseProps,
           status: 'recovering',
           progress: 0,
           isLoading: false
         };
       } else if (p.status === 'queue' && !p.isLoading) {
         // 真正等待的任务（不在 submittedTask 中），保持 queue
-        return p;
+        return { ...p, ...baseProps };
       } else {
         // 其他状态（loading、generating）设为 recovering
         return {
           ...p,
+          ...baseProps,
           status: 'recovering',
           progress: 0,
           isLoading: false
