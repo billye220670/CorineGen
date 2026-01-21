@@ -3747,3 +3747,178 @@ body {
   }
 }
 
+/* ========================================
+   恢复会话对话框样式
+   ======================================== */
+.restore-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.restore-dialog {
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 30px;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.restore-dialog h2 {
+  margin: 0 0 20px 0;
+  font-size: 20px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.restore-info {
+  margin-bottom: 25px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.restore-info p {
+  margin: 0 0 10px 0;
+}
+
+.restore-info strong {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.restore-time {
+  color: var(--text-secondary) !important;
+  font-size: 14px;
+  margin-top: 10px !important;
+}
+
+.restore-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.restore-btn-primary {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%);
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.restore-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.restore-btn-primary:active {
+  transform: translateY(0);
+}
+
+.restore-btn-secondary {
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  padding: 10px 24px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 15px;
+  transition: all 0.2s;
+}
+
+.restore-btn-secondary:hover {
+  background: var(--hover-bg);
+  border-color: var(--primary-color);
+  color: var(--text-primary);
+}
+
+.restore-btn-secondary:active {
+  transform: scale(0.98);
+}
+
+/* 浅色模式样式 */
+.light-mode .restore-dialog {
+  background: hsl(0, 0%, 98%);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.light-mode .restore-dialog h2 {
+  color: hsl(0, 0%, 20%);
+}
+
+.light-mode .restore-info {
+  color: hsl(0, 0%, 30%);
+}
+
+.light-mode .restore-time {
+  color: hsl(0, 0%, 50%) !important;
+}
+
+.light-mode .restore-btn-secondary {
+  background: hsl(0, 0%, 95%);
+  color: hsl(0, 0%, 40%);
+  border-color: hsl(0, 0%, 85%);
+}
+
+.light-mode .restore-btn-secondary:hover {
+  background: hsl(0, 0%, 90%);
+  color: hsl(0, 0%, 20%);
+}
+
+/* 响应式设计 */
+@media (max-width: 600px) {
+  .restore-dialog {
+    width: 95%;
+    padding: 24px;
+  }
+
+  .restore-dialog h2 {
+    font-size: 18px;
+  }
+
+  .restore-actions {
+    flex-direction: column-reverse;
+  }
+
+  .restore-btn-primary,
+  .restore-btn-secondary {
+    width: 100%;
+  }
+}
+
+

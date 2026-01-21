@@ -14,6 +14,7 @@ import { apiClient } from './services/apiClient.js';
 import { WsClient } from './services/wsClient.js';
 import { API_CONFIG, getApiKey, setApiKey, isAuthRequired } from './config/api.js';
 import { generatePrompt } from './services/promptAssistantApi.js';
+import { SessionManager } from './services/sessionManager.js';
 
 // 应用版本号
 const APP_VERSION = '1.1.4';  // 修复后端未完全启动时继续生成卡queue
@@ -221,6 +222,11 @@ const App = () => {
     reason: ''
   });
 
+  // 会话管理状态
+  const [hasSessionToRestore, setHasSessionToRestore] = useState(false);
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+  const [restoredSession, setRestoredSession] = useState(null);
+
   // 参考图片下拉菜单状态
   const [showRefImageMenu, setShowRefImageMenu] = useState({});
 
@@ -242,6 +248,11 @@ const App = () => {
   const generationQueueRef = useRef([]); // 同步跟踪生成队列，避免状态更新延迟
   const imagePlaceholdersRef = useRef([]); // 同步跟踪占位符，避免闭包陷阱
   const imagesContainerRef = useRef(null); // 图片容器ref，用于自动滚动
+
+  // 会话管理 ref
+  const sessionIdRef = useRef(`sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+  const submittedTasksRef = useRef([]); // 已提交任务列表，用于恢复时查询状态
+  const nextBatchIdRef = useRef(nextBatchId.current); // 批次计数器的 ref 引用
 
   // 平滑滚动到图片容器底部
   const scrollToBottom = () => {
@@ -419,6 +430,33 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('corineGen_selectedResultIndex', JSON.stringify(selectedResultIndex));
   }, [selectedResultIndex]);
+
+  // 自动保存会话（防抖 1 秒）
+  useEffect(() => {
+    // 如果没有任务且没有生成中，不保存
+    if (!isGenerating && generationQueue.length === 0 && imagePlaceholders.length === 0) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      const sessionData = {
+        sessionId: sessionIdRef.current,
+        queue: generationQueueRef.current,
+        placeholders: imagePlaceholdersRef.current,
+        isGenerating,
+        recoveryState,
+        nextBatchId: nextBatchIdRef.current,
+        submittedTasks: submittedTasksRef.current
+      };
+
+      const saved = SessionManager.saveSession(sessionData);
+      if (!saved) {
+        console.warn('会话保存失败');
+      }
+    }, 1000); // 防抖 1 秒
+
+    return () => clearTimeout(timeoutId);
+  }, [generationQueue, imagePlaceholders, isGenerating, recoveryState]);
 
   // 获取当前所有预设参数的快照
   const getCurrentSettingsSnapshot = () => ({
@@ -790,6 +828,21 @@ const App = () => {
   useEffect(() => {
     checkConnection();
   }, []);
+
+  // 连接成功后检测会话恢复
+  useEffect(() => {
+    if (connectionStatus === 'connected') {
+      // 检测是否有历史会话
+      if (SessionManager.hasActiveSession()) {
+        const session = SessionManager.loadSession();
+        if (session) {
+          setRestoredSession(session);
+          setHasSessionToRestore(true);
+          setShowRestoreDialog(true);
+        }
+      }
+    }
+  }, [connectionStatus]);
 
   // 切换视图模式
   const toggleViewMode = () => {
@@ -1266,6 +1319,139 @@ const App = () => {
   };
 
   // 处理队列
+  // 会话恢复逻辑：继续执行
+  const handleContinueSession = async () => {
+    setShowRestoreDialog(false);
+
+    // 1. 恢复状态
+    generationQueueRef.current = restoredSession.queue;
+    setGenerationQueue(restoredSession.queue);
+
+    imagePlaceholdersRef.current = restoredSession.placeholders;
+    setImagePlaceholders(restoredSession.placeholders);
+
+    setRecoveryState(restoredSession.recoveryState);
+    nextBatchIdRef.current = restoredSession.nextBatchId;
+    nextBatchId.current = restoredSession.nextBatchId;
+    submittedTasksRef.current = restoredSession.submittedTasks || [];
+    sessionIdRef.current = restoredSession.sessionId;
+
+    // 2. 查询已提交任务的状态
+    await checkSubmittedTasksStatus();
+
+    // 3. 如果有队列，继续处理
+    if (generationQueueRef.current.length > 0 && !restoredSession.isGenerating) {
+      processQueue();
+    }
+  };
+
+  // 会话恢复逻辑：放弃并开始新会话
+  const handleDiscardSession = () => {
+    setShowRestoreDialog(false);
+
+    // 将会话转为历史记录
+    SessionManager.saveToHistory(restoredSession);
+
+    // 清空会话
+    SessionManager.clearSession();
+
+    // 重置应用状态（使用初始值）
+    setGenerationQueue([]);
+    setImagePlaceholders([]);
+    setIsGenerating(false);
+    setRecoveryState({
+      isPaused: false,
+      pausedBatchId: null,
+      promptId: null,
+      pausedIndex: 0,
+      totalCount: 0,
+      savedParams: null,
+      reason: ''
+    });
+
+    generationQueueRef.current = [];
+    imagePlaceholdersRef.current = [];
+    nextBatchIdRef.current = 1;
+    nextBatchId.current = 1;
+    submittedTasksRef.current = [];
+    sessionIdRef.current = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  };
+
+  // 查询已提交任务的状态（从 ComfyUI History API）
+  const checkSubmittedTasksStatus = async () => {
+    const pendingTasks = submittedTasksRef.current.filter(
+      task => task.status === 'pending'
+    );
+
+    for (const task of pendingTasks) {
+      try {
+        const historyResponse = await fetch(
+          `${COMFYUI_API}/history/${task.promptId}`,
+          {
+            headers: getAuthHeaders()
+          }
+        );
+
+        if (!historyResponse.ok) {
+          // 任务可能失败或不存在
+          task.status = 'failed';
+
+          // 更新对应的占位符状态
+          updateImagePlaceholders(prev => prev.map(p =>
+            task.placeholderIds.includes(p.id)
+              ? { ...p, status: 'error', error: '任务已失败或不存在' }
+              : p
+          ));
+
+          continue;
+        }
+
+        const history = await historyResponse.json();
+        const outputs = history[task.promptId]?.outputs;
+
+        if (!outputs) {
+          // 任务仍在队列中或正在处理
+          continue;
+        }
+
+        // 任务已完成，提取图片
+        const outputNode = Object.keys(outputs)[0];
+        const images = outputs[outputNode]?.images || [];
+
+        if (images.length > 0) {
+          task.status = 'completed';
+
+          // 更新占位符的图片 URL
+          images.forEach((img, index) => {
+            const placeholderId = task.placeholderIds[index];
+            if (!placeholderId) return;
+
+            const imageUrl = getImageUrl(
+              img.filename,
+              img.subfolder,
+              img.type
+            );
+
+            updateImagePlaceholders(prev => prev.map(p =>
+              p.id === placeholderId
+                ? {
+                    ...p,
+                    status: 'completed',
+                    imageUrl: imageUrl,
+                    filename: img.filename,
+                    progress: 100
+                  }
+                : p
+            ));
+          });
+        }
+
+      } catch (error) {
+        console.error(`查询任务 ${task.promptId} 状态失败:`, error);
+      }
+    }
+  };
+
   const processQueue = () => {
     if (generationQueueRef.current.length === 0) {
       setIsGenerating(false);
@@ -1535,6 +1721,34 @@ const App = () => {
                       });
                     }
 
+                    // 将此批次添加到历史记录
+                    const batchPlaceholders = completedPlaceholders.filter(
+                      p => p.batchId === batchId && p.status === 'completed'
+                    );
+
+                    if (batchPlaceholders.length > 0) {
+                      const firstPlaceholder = batchPlaceholders[0];
+                      const promptText = firstPlaceholder.savedParams?.positivePrompt || '未知提示词';
+
+                      SessionManager.addBatchToHistory({
+                        batchId: batchId,
+                        sessionId: sessionIdRef.current,
+                        promptId: firstPlaceholder.promptId,
+                        promptText: promptText,
+                        images: batchPlaceholders.map(p => ({
+                          id: p.id,
+                          imageUrl: p.imageUrl,
+                          filename: p.filename,
+                          seed: p.seed,
+                          aspectRatio: p.aspectRatio,
+                          displayQuality: p.displayQuality,
+                          hqImageUrl: p.hqImageUrl,
+                          hqFilename: p.hqFilename,
+                          savedParams: p.savedParams
+                        }))
+                      });
+                    }
+
                     return completedPlaceholders;
                   });
                 }, 800);
@@ -1586,6 +1800,21 @@ const App = () => {
       }
 
       const result = await promptResponse.json();
+
+      // 记录提交的任务到 submittedTasks（用于会话恢复）
+      if (result.prompt_id) {
+        const placeholderIds = imagePlaceholdersRef.current
+          .filter(p => p.batchId === batchId)
+          .map(p => p.id);
+
+        submittedTasksRef.current.push({
+          promptId: result.prompt_id,
+          batchId: batchId,
+          placeholderIds: placeholderIds,
+          timestamp: Date.now(),
+          status: 'pending'
+        });
+      }
 
       // 设置超时
       timeoutId = setTimeout(() => {
@@ -1856,6 +2085,21 @@ const App = () => {
         }
 
         const result = await promptResponse.json();
+
+        // 记录提交的任务到 submittedTasks（用于会话恢复）
+        if (result.prompt_id) {
+          const placeholderIds = imagePlaceholdersRef.current
+            .filter(p => p.batchId === currentBatchId)
+            .map(p => p.id);
+
+          submittedTasksRef.current.push({
+            promptId: result.prompt_id,
+            batchId: currentBatchId,
+            placeholderIds: placeholderIds,
+            timestamp: Date.now(),
+            status: 'pending'
+          });
+        }
 
         // 设置超时
         timeoutId = setTimeout(() => {
@@ -2989,6 +3233,40 @@ const App = () => {
           </button>
         )}
       </div>
+
+      {/* 恢复会话对话框 */}
+      {showRestoreDialog && restoredSession && (
+        <div className="restore-dialog-overlay">
+          <div className="restore-dialog">
+            <h2>🔄 检测到未完成的生成任务</h2>
+
+            <div className="restore-info">
+              <p>
+                上次会话包含 <strong>{restoredSession.queue.length}</strong> 个待执行任务
+                和 <strong>{restoredSession.placeholders.filter(p => p.status === 'completed').length}</strong> 张已生成的图片
+              </p>
+              <p className="restore-time">
+                最后更新时间：{new Date(restoredSession.timestamp).toLocaleString('zh-CN')}
+              </p>
+            </div>
+
+            <div className="restore-actions">
+              <button
+                className="restore-btn-primary"
+                onClick={handleContinueSession}
+              >
+                继续执行
+              </button>
+              <button
+                className="restore-btn-secondary"
+                onClick={handleDiscardSession}
+              >
+                放弃并开始新会话
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="container">
         {/* 设置按钮 */}
