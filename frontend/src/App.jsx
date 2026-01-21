@@ -236,6 +236,7 @@ const App = () => {
   const recoveryStateRef = useRef(recoveryState); // 同步跟踪恢复状态
   const longPressTimerRef = useRef(null); // 长按计时器
   const longPressTriggeredRef = useRef(false); // 长按是否已触发
+  const isLongPressRef = useRef(false); // 用于提示词助理长按检测
   const imageInputRefs = useRef({}); // 图片上传input的refs
 
   // 计算下一个提示词ID
@@ -2089,12 +2090,12 @@ const App = () => {
         // 记录提交的任务到 submittedTasks（用于会话恢复）
         if (result.prompt_id) {
           const placeholderIds = imagePlaceholdersRef.current
-            .filter(p => p.batchId === currentBatchId)
+            .filter(p => p.batchId === batchId)
             .map(p => p.id);
 
           submittedTasksRef.current.push({
             promptId: result.prompt_id,
-            batchId: currentBatchId,
+            batchId: batchId,
             placeholderIds: placeholderIds,
             timestamp: Date.now(),
             status: 'pending'
@@ -3134,10 +3135,6 @@ const App = () => {
       console.log(`[Prompt Assistant] 替换提示词 ID ${targetId}: ${text.slice(0, 50)}...`);
     }
   };
-
-  // 长按计时器
-  const longPressTimerRef = useRef(null);
-  const isLongPressRef = useRef(false);
 
   // 处理按下（开始长按计时）
   const handleAddButtonMouseDown = (text) => {
