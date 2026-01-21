@@ -1415,14 +1415,30 @@ const App = () => {
     setShowRestoreDialog(false);
 
     // 1. 恢复所有占位符
+    // 首先收集所有 pending submittedTask 的 placeholderIds
+    const pendingPlaceholderIds = new Set();
+    (restoredSession.submittedTasks || []).forEach(task => {
+      if (task.status === 'pending') {
+        task.placeholderIds.forEach(id => pendingPlaceholderIds.add(id));
+      }
+    });
+
     const restoredPlaceholders = restoredSession.placeholders.map(p => {
       if (p.status === 'completed') {
         return p; // 已完成的保持不变
+      } else if (pendingPlaceholderIds.has(p.id)) {
+        // 属于 pending 的 submittedTask，设为 recovering（包括同批次的所有图片）
+        return {
+          ...p,
+          status: 'recovering',
+          progress: 0,
+          isLoading: false
+        };
       } else if (p.status === 'queue' && !p.isLoading) {
-        // queue 状态且不在 loading 中，保持 queue 等待继续执行
+        // 真正等待的任务（不在 submittedTask 中），保持 queue
         return p;
       } else {
-        // loading（isLoading=true）、generating 状态设为 recovering（需要轮询恢复）
+        // 其他状态（loading、generating）设为 recovering
         return {
           ...p,
           status: 'recovering',
