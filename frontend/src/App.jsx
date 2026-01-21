@@ -17,7 +17,7 @@ import { generatePrompt } from './services/promptAssistantApi.js';
 import { SessionManager } from './services/sessionManager.js';
 
 // 应用版本号
-const APP_VERSION = '1.1.4';  // 修复后端未完全启动时继续生成卡queue
+const APP_VERSION = '1.2.0';  // 会话恢复功能：刷新页面后自动恢复生成队列和历史记录
 
 // 图生图/ControlNet 降噪强度默认值
 const DEFAULT_IMG2IMG_DENOISE = 1;
@@ -1324,24 +1324,103 @@ const App = () => {
   const handleContinueSession = async () => {
     setShowRestoreDialog(false);
 
-    // 1. 恢复状态
+    // 1. 分离已完成和未完成的占位符
+    const completedPlaceholders = restoredSession.placeholders.filter(p => p.status === 'completed');
+    const incompletePlaceholders = restoredSession.placeholders.filter(p => p.status !== 'completed');
+
+    console.log(`[会话恢复] 已完成: ${completedPlaceholders.length}, 未完成: ${incompletePlaceholders.length}`);
+
+    // 2. 恢复已完成的占位符
+    imagePlaceholdersRef.current = completedPlaceholders;
+    setImagePlaceholders(completedPlaceholders);
+
+    // 3. 恢复队列（队列中的任务会重新创建占位符）
     generationQueueRef.current = restoredSession.queue;
     setGenerationQueue(restoredSession.queue);
 
-    imagePlaceholdersRef.current = restoredSession.placeholders;
-    setImagePlaceholders(restoredSession.placeholders);
-
-    setRecoveryState(restoredSession.recoveryState);
+    // 4. 恢复批次计数器
     nextBatchIdRef.current = restoredSession.nextBatchId;
     nextBatchId.current = restoredSession.nextBatchId;
-    submittedTasksRef.current = restoredSession.submittedTasks || [];
     sessionIdRef.current = restoredSession.sessionId;
 
-    // 2. 查询已提交任务的状态
-    await checkSubmittedTasksStatus();
+    // 5. 清空旧的提交记录（这些任务可能已经失效）
+    submittedTasksRef.current = [];
 
-    // 3. 如果有队列，继续处理
-    if (generationQueueRef.current.length > 0 && !restoredSession.isGenerating) {
+    // 6. 查询已提交但可能未完成的任务状态
+    const submittedTasks = restoredSession.submittedTasks || [];
+    for (const task of submittedTasks) {
+      if (task.status === 'pending') {
+        try {
+          const historyResponse = await fetch(
+            `${COMFYUI_API}/history/${task.promptId}`,
+            {
+              headers: getAuthHeaders()
+            }
+          );
+
+          if (historyResponse.ok) {
+            const history = await historyResponse.json();
+            const outputs = history[task.promptId]?.outputs;
+
+            if (outputs) {
+              // 任务已完成，提取图片
+              const outputNode = Object.keys(outputs)[0];
+              const images = outputs[outputNode]?.images || [];
+
+              if (images.length > 0) {
+                console.log(`[会话恢复] 任务 ${task.promptId} 已完成，添加 ${images.length} 张图片`);
+
+                // 为这些图片创建新的占位符（使用新的 batchId 避免冲突）
+                const newBatchId = nextBatchIdRef.current++;
+                const newPlaceholders = images.map((img, index) => {
+                  // 从原始占位符中找到对应的参数
+                  const originalPlaceholder = incompletePlaceholders.find(
+                    p => task.placeholderIds.includes(p.id)
+                  );
+
+                  return {
+                    id: `recovered-${newBatchId}-${index}`,
+                    promptId: originalPlaceholder?.promptId || 0,
+                    batchId: newBatchId,
+                    status: 'completed',
+                    imageUrl: getImageUrl(img.filename, img.subfolder, img.type),
+                    filename: img.filename,
+                    seed: originalPlaceholder?.seed || 0,
+                    aspectRatio: originalPlaceholder?.aspectRatio || '1:1',
+                    displayQuality: 'original',
+                    savedParams: originalPlaceholder?.savedParams || {},
+                    progress: 100,
+                    isNew: false,
+                    imageLoadError: false,
+                    imageRetryCount: 0
+                  };
+                });
+
+                // 添加到已恢复的占位符中
+                imagePlaceholdersRef.current = [...imagePlaceholdersRef.current, ...newPlaceholders];
+                setImagePlaceholders([...imagePlaceholdersRef.current]);
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`[会话恢复] 查询任务 ${task.promptId} 失败:`, error);
+        }
+      }
+    }
+
+    // 7. 重置恢复状态
+    setRecoveryState({
+      isPaused: false,
+      pausedBatchId: null,
+      promptId: null,
+      pausedIndex: 0,
+      totalCount: 0,
+      savedParams: null,
+      reason: ''
+    });
+
+    // 8. 如果有队列，继续处理
+    if (generationQueueRef.current.length > 0) {
       processQueue();
     }
   };
@@ -1376,81 +1455,6 @@ const App = () => {
     nextBatchId.current = 1;
     submittedTasksRef.current = [];
     sessionIdRef.current = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  };
-
-  // 查询已提交任务的状态（从 ComfyUI History API）
-  const checkSubmittedTasksStatus = async () => {
-    const pendingTasks = submittedTasksRef.current.filter(
-      task => task.status === 'pending'
-    );
-
-    for (const task of pendingTasks) {
-      try {
-        const historyResponse = await fetch(
-          `${COMFYUI_API}/history/${task.promptId}`,
-          {
-            headers: getAuthHeaders()
-          }
-        );
-
-        if (!historyResponse.ok) {
-          // 任务可能失败或不存在
-          task.status = 'failed';
-
-          // 更新对应的占位符状态
-          updateImagePlaceholders(prev => prev.map(p =>
-            task.placeholderIds.includes(p.id)
-              ? { ...p, status: 'error', error: '任务已失败或不存在' }
-              : p
-          ));
-
-          continue;
-        }
-
-        const history = await historyResponse.json();
-        const outputs = history[task.promptId]?.outputs;
-
-        if (!outputs) {
-          // 任务仍在队列中或正在处理
-          continue;
-        }
-
-        // 任务已完成，提取图片
-        const outputNode = Object.keys(outputs)[0];
-        const images = outputs[outputNode]?.images || [];
-
-        if (images.length > 0) {
-          task.status = 'completed';
-
-          // 更新占位符的图片 URL
-          images.forEach((img, index) => {
-            const placeholderId = task.placeholderIds[index];
-            if (!placeholderId) return;
-
-            const imageUrl = getImageUrl(
-              img.filename,
-              img.subfolder,
-              img.type
-            );
-
-            updateImagePlaceholders(prev => prev.map(p =>
-              p.id === placeholderId
-                ? {
-                    ...p,
-                    status: 'completed',
-                    imageUrl: imageUrl,
-                    filename: img.filename,
-                    progress: 100
-                  }
-                : p
-            ));
-          });
-        }
-
-      } catch (error) {
-        console.error(`查询任务 ${task.promptId} 状态失败:`, error);
-      }
-    }
   };
 
   const processQueue = () => {
@@ -3249,16 +3253,16 @@ const App = () => {
 
             <div className="restore-actions">
               <button
-                className="restore-btn-primary"
+                className="generate-all-button"
                 onClick={handleContinueSession}
               >
-                继续执行
+                恢复会话
               </button>
               <button
                 className="restore-btn-secondary"
                 onClick={handleDiscardSession}
               >
-                放弃并开始新会话
+                开始新会话
               </button>
             </div>
           </div>
