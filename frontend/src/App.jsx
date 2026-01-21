@@ -1323,42 +1323,41 @@ const App = () => {
   const handleContinueSession = async () => {
     setShowRestoreDialog(false);
 
-    // 1. 分离已完成和未完成的占位符
-    const completedPlaceholders = restoredSession.placeholders.filter(p => p.status === 'completed');
-    const incompletePlaceholders = restoredSession.placeholders.filter(p => p.status !== 'completed');
+    // 1. 恢复所有占位符，但将未完成的重置为 'queue' 状态
+    const restoredPlaceholders = restoredSession.placeholders.map(p => {
+      if (p.status === 'completed') {
+        return p; // 已完成的保持不变
+      } else {
+        // 未完成的（loading、generating、queue）重置为 queue
+        return {
+          ...p,
+          status: 'queue',
+          progress: 0,
+          isLoading: false
+        };
+      }
+    });
 
-    console.log(`[会话恢复] 已完成: ${completedPlaceholders.length}, 未完成: ${incompletePlaceholders.length}`);
+    console.log(`[会话恢复] 恢复 ${restoredPlaceholders.length} 个占位符`);
 
-    // 2. 恢复已完成的占位符
-    imagePlaceholdersRef.current = completedPlaceholders;
-    setImagePlaceholders(completedPlaceholders);
+    imagePlaceholdersRef.current = restoredPlaceholders;
+    setImagePlaceholders(restoredPlaceholders);
 
-    // 3. 恢复队列（队列中的任务会重新创建占位符）
+    // 2. 恢复队列
     generationQueueRef.current = restoredSession.queue;
     setGenerationQueue(restoredSession.queue);
 
-    // 4. 恢复批次计数器
+    // 3. 恢复批次计数器
     nextBatchId.current = restoredSession.nextBatchId;
     sessionIdRef.current = restoredSession.sessionId;
 
-    // 5. 清空旧的提交记录（这些任务可能已经失效）
+    // 4. 清空旧的提交记录
     submittedTasksRef.current = [];
 
-    // 6. 查询已提交但可能未完成的任务状态
+    // 5. 查询已提交任务的状态，就地更新占位符
     const submittedTasks = restoredSession.submittedTasks || [];
 
-    // 提取已完成占位符的ID集合，用于去重
-    const completedPlaceholderIds = new Set(completedPlaceholders.map(p => p.id));
-
     for (const task of submittedTasks) {
-      // 检查这个任务的占位符是否已经在 completedPlaceholders 中
-      const alreadyCompleted = task.placeholderIds.some(id => completedPlaceholderIds.has(id));
-
-      if (alreadyCompleted) {
-        console.log(`[会话恢复] 任务 ${task.promptId} 的占位符已存在，跳过`);
-        continue; // 跳过已存在的占位符
-      }
-
       if (task.status === 'pending') {
         try {
           const historyResponse = await fetch(
@@ -1373,43 +1372,37 @@ const App = () => {
             const outputs = history[task.promptId]?.outputs;
 
             if (outputs) {
-              // 任务已完成，提取图片
+              // 任务已完成，提取图片并就地更新占位符
               const outputNode = Object.keys(outputs)[0];
               const images = outputs[outputNode]?.images || [];
 
               if (images.length > 0) {
-                console.log(`[会话恢复] 任务 ${task.promptId} 已完成，添加 ${images.length} 张图片`);
+                console.log(`[会话恢复] 任务 ${task.promptId} 已完成，更新 ${images.length} 张图片`);
 
-                // 为这些图片创建新的占位符（使用新的 batchId 避免冲突）
-                const newBatchId = nextBatchId.current++;
-                const newPlaceholders = images.map((img, index) => {
-                  // 从原始占位符中找到对应的参数（应该从 incompletePlaceholders 中找）
-                  const originalPlaceholder = incompletePlaceholders.find(
-                    p => task.placeholderIds.includes(p.id)
+                // 就地更新对应的占位符
+                images.forEach((img, index) => {
+                  const placeholderId = task.placeholderIds[index];
+                  if (!placeholderId) return;
+
+                  const imageUrl = getImageUrl(img.filename, img.subfolder, img.type);
+
+                  imagePlaceholdersRef.current = imagePlaceholdersRef.current.map(p =>
+                    p.id === placeholderId ? {
+                      ...p,
+                      status: 'completed',
+                      imageUrl: imageUrl,
+                      filename: img.filename,
+                      progress: 100
+                    } : p
                   );
-
-                  return {
-                    id: `recovered-${newBatchId}-${index}`,
-                    promptId: originalPlaceholder?.promptId || 0,
-                    batchId: newBatchId,
-                    status: 'completed',
-                    imageUrl: getImageUrl(img.filename, img.subfolder, img.type),
-                    filename: img.filename,
-                    seed: originalPlaceholder?.seed || 0,
-                    aspectRatio: originalPlaceholder?.aspectRatio || '1:1',
-                    displayQuality: 'original',
-                    savedParams: originalPlaceholder?.savedParams || {},
-                    progress: 100,
-                    isNew: false,
-                    imageLoadError: false,
-                    imageRetryCount: 0
-                  };
                 });
 
-                // 添加到已恢复的占位符中
-                imagePlaceholdersRef.current = [...imagePlaceholdersRef.current, ...newPlaceholders];
                 setImagePlaceholders([...imagePlaceholdersRef.current]);
               }
+            } else {
+              // 任务还没完成（还在 ComfyUI 队列中或正在生成）
+              // 占位符保持 'queue' 状态，用户需要等待或重新生成
+              console.log(`[会话恢复] 任务 ${task.promptId} 还未完成，保持等待状态`);
             }
           }
         } catch (error) {
@@ -1418,7 +1411,7 @@ const App = () => {
       }
     }
 
-    // 7. 重置恢复状态
+    // 6. 重置恢复状态
     setRecoveryState({
       isPaused: false,
       pausedBatchId: null,
@@ -1429,7 +1422,7 @@ const App = () => {
       reason: ''
     });
 
-    // 8. 如果有队列，继续处理
+    // 7. 如果有队列，继续处理
     if (generationQueueRef.current.length > 0) {
       processQueue();
     }
