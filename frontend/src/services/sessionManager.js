@@ -55,13 +55,18 @@ export class SessionManager {
 
   /**
    * 精简会话数据，只保留必要字段
+   * 优化：只保留已完成且成功加载的图片，丢弃所有未完成的占位符
    */
   static minimizeSessionData(sessionData) {
-    // 精简占位符数据
-    const minimalPlaceholders = sessionData.placeholders.map(p => ({
+    // 1. 过滤占位符：只保留已完成且成功加载的图片
+    const completedPlaceholders = sessionData.placeholders.filter(p =>
+      p.status === 'completed' && p.imageUrl && p.imageLoadError !== true
+    );
+
+    // 2. 精简占位符数据（不保存临时状态字段）
+    const minimalPlaceholders = completedPlaceholders.map(p => ({
       id: p.id,
       status: p.status,
-      isLoading: p.isLoading,  // 保存 loading 状态，用于恢复时判断
       imageUrl: p.imageUrl,
       filename: p.filename,
       promptId: p.promptId,
@@ -69,23 +74,31 @@ export class SessionManager {
       seed: p.seed,
       aspectRatio: p.aspectRatio,
       displayQuality: p.displayQuality,
-      hqImageUrl: p.hqImageUrl,
+      hqImageUrl: p.hqImageUrl,           // 保留高清图
       hqFilename: p.hqFilename,
       savedParams: p.savedParams,
-      imageLoadError: p.imageLoadError,
-      imageRetryCount: p.imageRetryCount,
-      upscaleStatus: p.upscaleStatus,  // 保存高清化状态
-      upscaleProgress: p.upscaleProgress  // 保存高清化进度
+      upscaleStatus: p.upscaleStatus,      // 保留高清化状态
+      upscaleProgress: p.upscaleProgress
+      // 不保存 imageLoadError, imageRetryCount, isLoading - 这些是临时状态
     }));
 
+    // 3. 返回精简后的会话数据（清空队列和生成状态）
     return {
       sessionId: sessionData.sessionId,
-      queue: sessionData.queue,
+      queue: [],                          // 清空队列
       placeholders: minimalPlaceholders,
-      isGenerating: sessionData.isGenerating,
-      recoveryState: sessionData.recoveryState,
-      nextBatchId: sessionData.nextBatchId,
-      submittedTasks: sessionData.submittedTasks || []
+      isGenerating: false,                // 重置生成状态
+      recoveryState: {                    // 重置恢复状态
+        isPaused: false,
+        pausedBatchId: null,
+        promptId: null,
+        pausedIndex: 0,
+        totalCount: 0,
+        savedParams: null,
+        reason: ''
+      },
+      nextBatchId: sessionData.nextBatchId,  // 保留批次计数器
+      submittedTasks: []                  // 清空已提交任务
     };
   }
 

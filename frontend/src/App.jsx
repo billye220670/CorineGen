@@ -844,6 +844,72 @@ const App = () => {
     }
   }, [connectionStatus]);
 
+  // 页面卸载时清理当前会话的队列任务
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // 检查是否有待处理任务
+      const pendingTasks = submittedTasksRef.current.filter(
+        task => task.status === 'pending'
+      );
+
+      if (pendingTasks.length === 0 && !isGenerating) {
+        return; // 没有任务需要清理
+      }
+
+      console.log(`[页面卸载] 检测到页面卸载，准备清理 ${pendingTasks.length} 个任务`);
+
+      // 收集所有待处理任务的 promptId
+      const promptIds = pendingTasks.map(task => task.promptId);
+
+      // 使用 navigator.sendBeacon 发送清理请求
+      try {
+        const baseUrl = import.meta.env.DEV ? '' : (import.meta.env.VITE_BACKEND_URL || '');
+
+        // 发送 interrupt 请求中断当前运行的任务
+        navigator.sendBeacon(
+          `${baseUrl}/api/interrupt`,
+          new Blob([JSON.stringify({})], { type: 'application/json' })
+        );
+
+        // 发送 queue delete 请求删除待执行任务
+        if (promptIds.length > 0) {
+          const queuePayload = JSON.stringify({ delete: promptIds });
+          const sent = navigator.sendBeacon(
+            `${baseUrl}/api/queue`,
+            new Blob([queuePayload], { type: 'application/json' })
+          );
+
+          if (!sent) {
+            console.warn('[页面卸载] sendBeacon 失败，使用 fetch keepalive');
+
+            // 使用 fetch keepalive 作为后备
+            fetch(`${baseUrl}/api/interrupt`, {
+              method: 'POST',
+              keepalive: true,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({})
+            }).catch(err => console.error('[页面卸载] interrupt 失败:', err));
+
+            fetch(`${baseUrl}/api/queue`, {
+              method: 'POST',
+              keepalive: true,
+              headers: { 'Content-Type': 'application/json' },
+              body: queuePayload
+            }).catch(err => console.error('[页面卸载] deleteQueue 失败:', err));
+          }
+        }
+      } catch (error) {
+        console.error('[页面卸载] 清理失败:', error);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isGenerating]); // 依赖 isGenerating 以获取最新值
+
   // 切换视图模式
   const toggleViewMode = () => {
     const modes = ['small', 'medium', 'large'];

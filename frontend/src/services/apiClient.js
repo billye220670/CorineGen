@@ -155,6 +155,46 @@ class ApiClient {
   }
 
   /**
+   * 中断当前正在运行的任务
+   */
+  async interruptCurrentTask() {
+    try {
+      const response = await this.fetch('/api/interrupt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      return response;
+    } catch (error) {
+      console.error('[API] 中断任务失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 删除队列中的指定任务
+   * @param {string[]} promptIds - 要删除的 prompt_id 列表
+   */
+  async deleteQueueTasks(promptIds) {
+    try {
+      const response = await this.fetch('/api/queue', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          delete: promptIds
+        })
+      });
+      return response;
+    } catch (error) {
+      console.error('[API] 删除队列任务失败:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 生成唯一的客户端 ID
    */
   generateClientId() {
