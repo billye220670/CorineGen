@@ -1149,10 +1149,9 @@ const App = () => {
     let finalBatchId = batchId;
     let placeholders;
 
-    // 如果没有传入batchId，说明是单独点击箭头，需要创建新占位符
+    // 如果没有传入batchId，说明是直接调用，创建单个占位符
     if (finalBatchId === null) {
       finalBatchId = nextBatchId.current++;
-      const totalImages = batchSize;
       const currentAspectRatio = getAspectRatioValue();
 
       // 保存当前生成参数
@@ -1162,11 +1161,12 @@ const App = () => {
         steps: steps
       };
 
-      placeholders = Array.from({ length: totalImages }, (_, index) => ({
-        id: `${promptId}-${finalBatchId}-${index}`,
+      // 只创建单个占位符
+      const placeholder = {
+        id: `${promptId}-${finalBatchId}-0`,
         status: 'queue',
-        isLoading: false, // 是否正在加载模型
-        isNew: true, // 新创建的占位符，用于闪烁动画
+        isLoading: false,
+        isNew: true,
         progress: 0,
         imageUrl: null,
         filename: null,
@@ -1177,18 +1177,20 @@ const App = () => {
         hqImageUrl: null,
         hqFilename: null,
         seed: null,
-        aspectRatio: currentAspectRatio, // 保存当前图像比例（用于显示）
-        savedParams: savedParams, // 保存生成参数（用于生成）
-        displayQuality: 'hq', // 当前显示的清晰度：'sq' 标清 或 'hq' 高清
-        showQualityMenu: false, // 是否显示清晰度切换菜单
-        imageLoadError: false, // 图片加载是否失败
-        imageRetryCount: 0 // 图片加载重试次数
-      }));
+        aspectRatio: currentAspectRatio,
+        savedParams: savedParams,
+        displayQuality: 'hq',
+        showQualityMenu: false,
+        imageLoadError: false,
+        imageRetryCount: 0
+      };
 
-      console.log('[generateForPrompt] 创建占位符:', placeholders.map(p => ({ id: p.id, status: p.status, imageUrl: p.imageUrl })));
+      placeholders = [placeholder];
+
+      console.log('[generateForPrompt] 创建占位符:', placeholder.id);
 
       // 先更新ref（同步），再更新state（异步）
-      const updated = [...imagePlaceholdersRef.current, ...placeholders];
+      const updated = [...imagePlaceholdersRef.current, placeholder];
       imagePlaceholdersRef.current = updated;
       setImagePlaceholders(updated);
 
@@ -1615,56 +1617,69 @@ const App = () => {
       return;
     }
 
-    // 立即创建骨架占位符
-    const batchId = nextBatchId.current++;
-    const totalImages = batchSize;
     const currentAspectRatio = getAspectRatioValue();
-
-    // 保存当前生成参数
     const savedParams = {
       aspectRatio: aspectRatio,
       resolutionScale: resolutionScale,
       steps: steps
     };
 
-    const placeholders = Array.from({ length: totalImages }, (_, index) => ({
-      id: `${promptId}-${batchId}-${index}`,
-      status: 'queue',
-      isLoading: false, // 是否正在加载模型
-      isNew: true, // 新创建的占位符，用于闪烁动画
-      progress: 0,
-      imageUrl: null,
-      filename: null,
-      promptId: promptId,
-      batchId: batchId,
-      upscaleStatus: 'none',
-      upscaleProgress: 0,
-      hqImageUrl: null,
-      hqFilename: null,
-      seed: null,
-      aspectRatio: currentAspectRatio, // 保存当前图像比例（用于显示）
-      savedParams: savedParams, // 保存生成参数（用于生成）
-      displayQuality: 'hq', // 当前显示的清晰度：'sq' 标清 或 'hq' 高清
-      showQualityMenu: false, // 是否显示清晰度切换菜单
-      imageLoadError: false, // 图片加载是否失败
-      imageRetryCount: 0 // 图片加载重试次数
-    }));
+    // 循环 batchSize 次，每次创建一个独立的占位符和任务
+    const newPlaceholders = [];
+    const newQueueItems = [];
 
-    // 先更新ref（同步），再更新state（异步）
-    const updated = [...imagePlaceholdersRef.current, ...placeholders];
+    for (let i = 0; i < batchSize; i++) {
+      const batchId = nextBatchId.current++;
+
+      const placeholder = {
+        id: `${promptId}-${batchId}-0`,
+        status: 'queue',
+        isLoading: false,
+        isNew: true,
+        progress: 0,
+        imageUrl: null,
+        filename: null,
+        promptId: promptId,
+        batchId: batchId,
+        upscaleStatus: 'none',
+        upscaleProgress: 0,
+        hqImageUrl: null,
+        hqFilename: null,
+        seed: null,
+        aspectRatio: currentAspectRatio,
+        savedParams: savedParams,
+        displayQuality: 'hq',
+        showQualityMenu: false,
+        imageLoadError: false,
+        imageRetryCount: 0
+      };
+
+      newPlaceholders.push(placeholder);
+      newQueueItems.push({ promptId, promptText: prompt.text, batchId, savedParams });
+    }
+
+    // 一次性更新所有占位符
+    const updated = [...imagePlaceholdersRef.current, ...newPlaceholders];
     imagePlaceholdersRef.current = updated;
     setImagePlaceholders(updated);
 
     // 新任务加入时自动滚动到底部
     scrollToBottom();
 
+    // 处理队列：每个 batchId 都是独立任务，逐个处理
     if (!isGenerating) {
-      // 队列为空，直接开始
+      // 第一个任务立即开始，其余加入队列
+      const firstTask = newQueueItems[0];
+      const remainingTasks = newQueueItems.slice(1);
+
       setIsGenerating(true);
-      generateForPrompt(promptId, prompt.text, batchId);
+      generationQueueRef.current = [...generationQueueRef.current, ...remainingTasks];
+      setGenerationQueue(generationQueueRef.current);
+
+      generateForPrompt(firstTask.promptId, firstTask.promptText, firstTask.batchId);
     } else {
-      // 添加到队列，同时保存生成参数
-      generationQueueRef.current = [...generationQueueRef.current, { promptId, promptText: prompt.text, batchId, savedParams }];
+      // 正在生成中，全部添加到队列
+      generationQueueRef.current = [...generationQueueRef.current, ...newQueueItems];
       setGenerationQueue(generationQueueRef.current);
     }
   };
@@ -1968,306 +1983,291 @@ const App = () => {
     }
   };
 
-  // 工作流循环执行模式
+  // 工作流循环执行模式（简化版：每个 batchId 只有 1 个占位符）
   const generateLoop = async (promptId, promptText, placeholders, batchId, savedParams = null) => {
-    console.log('[generateLoop] 开始循环 - batchId:', batchId, 'batchSize:', batchSize);
+    console.log('[generateLoop] 开始生成 - batchId:', batchId);
 
-    for (let i = 0; i < batchSize; i++) {
-      console.log(`[generateLoop] 循环 ${i + 1}/${batchSize}`);
+    // 获取该 batchId 下的唯一占位符
+    const targetPlaceholder = imagePlaceholdersRef.current.find(p => p.batchId === batchId);
 
-      // 每次循环前检查该batchId下是否还有queue状态的占位符
+    if (!targetPlaceholder) {
+      console.error('[generateLoop] 未找到占位符 - batchId:', batchId);
+      return;
+    }
 
-      // 使用ref读取最新的占位符状态
-      const queuedPlaceholders = imagePlaceholdersRef.current.filter(p => p.batchId === batchId && p.status === 'queue');
+    console.log('[generateLoop] 目标占位符:', targetPlaceholder.id);
 
-      let targetPlaceholder = null;
-      if (queuedPlaceholders.length === 0) {
-        targetPlaceholder = null;
-      } else {
-        targetPlaceholder = queuedPlaceholders[0];
-      }
+    const clientId = generateClientId();
+    let ws = null;
+    let timeoutId = null;
 
-      console.log('[generateLoop] 找到的队列占位符数量:', queuedPlaceholders.length, 'targetPlaceholder:', targetPlaceholder?.id);
+    try {
+      const { workflow, seed } = buildWorkflow(promptText, 1, savedParams, targetPlaceholder.id);
 
-      // 如果没有queue状态的占位符了，结束循环
-      if (!targetPlaceholder) {
-        console.log('[generateLoop] 没有更多队列占位符，结束循环');
-        break;
-      }
+      console.log('[generateLoop] 构建工作流 - seed:', seed, 'targetPlaceholder:', targetPlaceholder.id, 'prompt长度:', workflow['5'].inputs.text.length);
 
-      const clientId = generateClientId();
-      let ws = null;
-      let timeoutId = null;
+      // 保存种子到当前占位符
+      updateImagePlaceholders(prev => prev.map(p =>
+        p.id === targetPlaceholder.id ? { ...p, seed } : p
+      ));
 
-      try {
-        const { workflow, seed } = buildWorkflow(promptText, 1, savedParams, targetPlaceholder.id);
+      // 创建WebSocket连接
+      ws = new WebSocket(getWebSocketUrl(clientId));
 
-        console.log('[generateLoop] 构建工作流 - seed:', seed, 'targetPlaceholder:', targetPlaceholder.id, 'prompt长度:', workflow['5'].inputs.text.length);
+      await new Promise((resolve, reject) => {
+        ws.onopen = () => {
+          console.log('WebSocket 连接成功');
 
-        // 保存种子到当前占位符
-        updateImagePlaceholders(prev => prev.map(p =>
-          p.id === targetPlaceholder.id ? { ...p, seed } : p
-        ));
+          // WebSocket 连接成功，清除恢复状态（如果是恢复操作）
+          if (batchId && recoveryStateRef.current.pausedBatchId === batchId) {
+            console.log('恢复操作成功，清除恢复状态');
+            setRecoveryState({
+              isPaused: false,
+              pausedBatchId: null,
+              promptId: null,
+              pausedIndex: 0,
+              totalCount: 0,
+              savedParams: null,
+              reason: ''
+            });
+          }
 
-        // 创建WebSocket连接
-        ws = new WebSocket(getWebSocketUrl(clientId));
+          resolve();
+        };
 
-        await new Promise((resolve, reject) => {
-          ws.onopen = () => {
-            console.log('WebSocket 连接成功');
+        ws.onerror = (error) => {
+          console.error('WebSocket错误:', error);
+          reject(new Error('WebSocket连接失败'));
+        };
 
-            // WebSocket 连接成功，清除恢复状态（如果是恢复操作）
-            if (batchId && recoveryStateRef.current.pausedBatchId === batchId) {
-              console.log('恢复操作成功，清除恢复状态');
-              setRecoveryState({
-                isPaused: false,
-                pausedBatchId: null,
-                promptId: null,
-                pausedIndex: 0,
-                totalCount: 0,
-                savedParams: null,
-                reason: ''
-              });
+        // 监听WebSocket异常关闭
+        ws.onclose = (event) => {
+          // 1000 是正常关闭，其他都是异常
+          if (event.code !== 1000 && event.code !== 1005) {
+            console.error('WebSocket异常关闭:', event.code, event.reason);
+            reject(new Error('WebSocket连接断开'));
+          }
+        };
+
+        // 监听WebSocket消息
+        ws.onmessage = async (event) => {
+          try {
+            // 过滤掉Blob类型的消息（预览图片）
+            if (typeof event.data !== 'string') {
+              return;
             }
 
-            resolve();
-          };
+            const message = JSON.parse(event.data);
+            const { type, data } = message;
 
-          ws.onerror = (error) => {
-            console.error('WebSocket错误:', error);
-            reject(new Error('WebSocket连接失败'));
-          };
+            // execution_start 消息 - 任务开始执行（模型可能正在加载）
+            if (type === 'execution_start') {
+              // 如果收到执行消息，说明连接是正常的，自动恢复连接状态
+              if (connectionStatus !== 'connected') {
+                setConnectionStatus('connected');
+                setConnectionMessage('已重新连接到 ComfyUI');
+                setShowNotification(true);
+                setTimeout(() => setShowNotification(false), 3000);
+                startHeartbeat();
+              }
 
-          // 监听WebSocket异常关闭
-          ws.onclose = (event) => {
-            // 1000 是正常关闭，其他都是异常
-            if (event.code !== 1000 && event.code !== 1005) {
-              console.error('WebSocket异常关闭:', event.code, event.reason);
-              reject(new Error('WebSocket连接断开'));
+              updateImagePlaceholders(prev => prev.map(p =>
+                p.id === targetPlaceholder.id && p.status === 'queue' ? {
+                  ...p,
+                  isLoading: true
+                } : p
+              ));
             }
-          };
 
-          // 监听WebSocket消息
-          ws.onmessage = async (event) => {
-            try {
-              // 过滤掉Blob类型的消息（预览图片）
-              if (typeof event.data !== 'string') {
-                return;
+            // 进度更新消息 - 更新当前图片的进度
+            if (type === 'progress') {
+              // 如果收到进度消息，说明连接是正常的，自动恢复连接状态
+              if (connectionStatus !== 'connected') {
+                setConnectionStatus('connected');
+                setConnectionMessage('已重新连接到 ComfyUI');
+                setShowNotification(true);
+                setTimeout(() => setShowNotification(false), 3000);
+                startHeartbeat();
+                reloadFailedImages();
               }
 
-              const message = JSON.parse(event.data);
-              const { type, data } = message;
+              const { value, max } = data;
+              if (max > 0) {
+                const progressPercent = Math.floor((value / max) * 100);
 
-              // execution_start 消息 - 任务开始执行（模型可能正在加载）
-              if (type === 'execution_start') {
-                // 如果收到执行消息，说明连接是正常的，自动恢复连接状态
-                if (connectionStatus !== 'connected') {
-                  setConnectionStatus('connected');
-                  setConnectionMessage('已重新连接到 ComfyUI');
-                  setShowNotification(true);
-                  setTimeout(() => setShowNotification(false), 3000);
-                  startHeartbeat();
-                }
-
-                updateImagePlaceholders(prev => prev.map(p =>
-                  p.id === targetPlaceholder.id && p.status === 'queue' ? {
-                    ...p,
-                    isLoading: true
-                  } : p
-                ));
+                // 更新当前占位符的进度
+                updateImagePlaceholders(prev =>
+                  prev.map(p =>
+                    p.id === targetPlaceholder.id ? {
+                      ...p,
+                      status: 'generating',
+                      progress: progressPercent
+                    } : p
+                  )
+                );
               }
+            }
 
-              // 进度更新消息 - 更新当前图片的进度
-              if (type === 'progress') {
-                // 如果收到进度消息，说明连接是正常的，自动恢复连接状态
-                if (connectionStatus !== 'connected') {
-                  setConnectionStatus('connected');
-                  setConnectionMessage('已重新连接到 ComfyUI');
-                  setShowNotification(true);
-                  setTimeout(() => setShowNotification(false), 3000);
-                  startHeartbeat();
-                  reloadFailedImages();
-                }
+            // 执行状态消息
+            if (type === 'executing') {
+              const { node, prompt_id } = data;
 
-                const { value, max } = data;
-                if (max > 0) {
-                  const progressPercent = Math.floor((value / max) * 100);
+              // 当node为null时，表示执行完成
+              if (node === null && prompt_id) {
+                console.log('[generateLoop] 执行完成 - prompt_id:', prompt_id, 'targetPlaceholder:', targetPlaceholder.id);
 
-                  // 更新当前占位符的进度
-                  updateImagePlaceholders(prev =>
-                    prev.map(p =>
-                      p.id === targetPlaceholder.id ? {
-                        ...p,
-                        status: 'generating',
-                        progress: progressPercent
-                      } : p
-                    )
-                  );
-                }
-              }
+                // 获取生成的图像
+                const historyResponse = await fetch(`${COMFYUI_API}/history/${prompt_id}`, {
+              headers: getAuthHeaders()
+            });
+                const history = await historyResponse.json();
 
-              // 执行状态消息
-              if (type === 'executing') {
-                const { node, prompt_id } = data;
+                if (history[prompt_id] && history[prompt_id].outputs) {
+                  const outputs = history[prompt_id].outputs;
 
-                // 当node为null时，表示执行完成
-                if (node === null && prompt_id) {
-                  console.log('[generateLoop] 执行完成 - prompt_id:', prompt_id, 'targetPlaceholder:', targetPlaceholder.id);
+                  for (const nodeId in outputs) {
+                    if (outputs[nodeId].images && outputs[nodeId].images[0]) {
+                      const img = outputs[nodeId].images[0];
+                      const imageUrl = getImageUrl(img.filename, img.subfolder, img.type);
 
-                  // 获取生成的图像
-                  const historyResponse = await fetch(`${COMFYUI_API}/history/${prompt_id}`, {
-                headers: getAuthHeaders()
-              });
-                  const history = await historyResponse.json();
+                      console.log('[generateLoop] 获取到图片 - filename:', img.filename, 'imageUrl:', imageUrl, '准备更新占位符:', targetPlaceholder.id);
 
-                  if (history[prompt_id] && history[prompt_id].outputs) {
-                    const outputs = history[prompt_id].outputs;
+                      // 更新当前占位符为revealing状态，触发动画
+                      updateImagePlaceholders(prev =>
+                        prev.map(p =>
+                          p.id === targetPlaceholder.id ? {
+                            ...p,
+                            status: 'revealing',
+                            progress: 100,
+                            imageUrl: imageUrl,
+                            filename: img.filename
+                          } : p
+                        )
+                      );
 
-                    for (const nodeId in outputs) {
-                      if (outputs[nodeId].images && outputs[nodeId].images[0]) {
-                        const img = outputs[nodeId].images[0];
-                        const imageUrl = getImageUrl(img.filename, img.subfolder, img.type);
+                      // 延迟后设置为completed，显示图片
+                      setTimeout(() => {
+                        updateImagePlaceholders(prev => {
+                          const completedPlaceholders = prev.map(p =>
+                            p.id === targetPlaceholder.id ? { ...p, status: 'completed' } : p
+                          );
 
-                        console.log('[generateLoop] 获取到图片 - filename:', img.filename, 'imageUrl:', imageUrl, '准备更新占位符:', targetPlaceholder.id);
+                          console.log('[generateLoop] 占位符标记为completed:', targetPlaceholder.id);
 
-                        // 更新当前占位符为revealing状态，触发动画
-                        updateImagePlaceholders(prev =>
-                          prev.map(p =>
-                            p.id === targetPlaceholder.id ? {
-                              ...p,
-                              status: 'revealing',
-                              progress: 100,
-                              imageUrl: imageUrl,
-                              filename: img.filename
-                            } : p
-                          )
-                        );
-
-                        // 延迟后设置为completed，显示图片
-                        setTimeout(() => {
-                          updateImagePlaceholders(prev => {
-                            const completedPlaceholders = prev.map(p =>
-                              p.id === targetPlaceholder.id ? { ...p, status: 'completed' } : p
-                            );
-
-                            console.log('[generateLoop] 占位符标记为completed:', targetPlaceholder.id);
-
-                            // 如果启用了自动高清化，将完成的图片加入高清化队列
-                            if (autoUpscaleAfterGen) {
-                              const completedPlaceholder = completedPlaceholders.find(p => p.id === targetPlaceholder.id);
-                              if (completedPlaceholder && completedPlaceholder.status === 'completed') {
-                                setTimeout(() => queueUpscale(completedPlaceholder.id), 0);
-                              }
+                          // 如果启用了自动高清化，将完成的图片加入高清化队列
+                          if (autoUpscaleAfterGen) {
+                            const completedPlaceholder = completedPlaceholders.find(p => p.id === targetPlaceholder.id);
+                            if (completedPlaceholder && completedPlaceholder.status === 'completed') {
+                              setTimeout(() => queueUpscale(completedPlaceholder.id), 0);
                             }
+                          }
 
-                            return completedPlaceholders;
-                          });
-                        }, 800);
-                      }
+                          return completedPlaceholders;
+                        });
+                      }, 800);
                     }
                   }
-
-                  if (ws) ws.close();
-                  if (timeoutId) clearTimeout(timeoutId);
-                  resolve();
                 }
-              }
 
-              // 执行错误消息
-              if (type === 'execution_error') {
-                console.error('执行错误:', data);
                 if (ws) ws.close();
                 if (timeoutId) clearTimeout(timeoutId);
-                reject(new Error(data.exception_message || '未知错误'));
+                resolve();
               }
-            } catch (err) {
-              console.error('消息处理错误:', err);
             }
-          };
-        });
 
-        // 等待WebSocket连接建立
-        if (ws.readyState !== WebSocket.OPEN) {
-          await new Promise((resolve) => {
-            ws.addEventListener('open', resolve, { once: true });
-          });
-        }
+            // 执行错误消息
+            if (type === 'execution_error') {
+              console.error('执行错误:', data);
+              if (ws) ws.close();
+              if (timeoutId) clearTimeout(timeoutId);
+              reject(new Error(data.exception_message || '未知错误'));
+            }
+          } catch (err) {
+            console.error('消息处理错误:', err);
+          }
+        };
+      });
 
-        // 提交prompt到ComfyUI
-        const promptResponse = await fetch(`${COMFYUI_API}/prompt`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            prompt: workflow,
-            client_id: clientId
-          }),
-        });
-
-        if (!promptResponse.ok) {
-          throw new Error('提交任务失败');
-        }
-
-        const result = await promptResponse.json();
-
-        // 记录提交的任务到 submittedTasks（用于会话恢复）
-        // loop 模式下只记录当前占位符，不是所有相同 batchId 的占位符
-        if (result.prompt_id) {
-          submittedTasksRef.current.push({
-            promptId: result.prompt_id,
-            batchId: batchId,
-            placeholderIds: [targetPlaceholder.id],  // 只记录当前这一个
-            timestamp: Date.now(),
-            status: 'pending'
-          });
-        }
-
-        // 设置超时
-        timeoutId = setTimeout(() => {
-          if (ws) ws.close();
-          throw new Error('生成超时');
-        }, 300000);
-
-        // 等待当前循环完成
+      // 等待WebSocket连接建立
+      if (ws.readyState !== WebSocket.OPEN) {
         await new Promise((resolve) => {
-          const checkInterval = setInterval(() => {
-            if (ws.readyState === WebSocket.CLOSED) {
-              clearInterval(checkInterval);
-              resolve();
-            }
-          }, 100);
+          ws.addEventListener('open', resolve, { once: true });
         });
-
-      } catch (err) {
-        console.error(`[generateLoop] 循环 ${i + 1} 错误:`, err);
-
-        // 重置当前占位符为 failed
-        updateImagePlaceholders(prev => prev.map(p =>
-          p.id === targetPlaceholder.id && p.status === 'generating'
-            ? { ...p, status: 'failed', error: err.message }
-            : p
-        ));
-
-        if (ws) ws.close();
-        if (timeoutId) clearTimeout(timeoutId);
-
-        // 如果是连接错误，触发暂停
-        if (err.message.includes('WebSocket') || err.message.includes('连接') || err.message.includes('超时')) {
-          pauseGeneration(err.message);
-          break;  // 中断循环
-        }
-
-        throw err;
       }
+
+      // 提交prompt到ComfyUI
+      const promptResponse = await fetch(`${COMFYUI_API}/prompt`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: workflow,
+          client_id: clientId
+        }),
+      });
+
+      if (!promptResponse.ok) {
+        throw new Error('提交任务失败');
+      }
+
+      const result = await promptResponse.json();
+
+      // 记录提交的任务到 submittedTasks（用于会话恢复）
+      if (result.prompt_id) {
+        submittedTasksRef.current.push({
+          promptId: result.prompt_id,
+          batchId: batchId,
+          placeholderIds: [targetPlaceholder.id],
+          timestamp: Date.now(),
+          status: 'pending'
+        });
+      }
+
+      // 设置超时
+      timeoutId = setTimeout(() => {
+        if (ws) ws.close();
+        throw new Error('生成超时');
+      }, 300000);
+
+      // 等待生成完成
+      await new Promise((resolve) => {
+        const checkInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.CLOSED) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 100);
+      });
+
+    } catch (err) {
+      console.error('[generateLoop] 生成错误:', err);
+
+      // 重置当前占位符为 failed
+      updateImagePlaceholders(prev => prev.map(p =>
+        p.id === targetPlaceholder.id && p.status === 'generating'
+          ? { ...p, status: 'failed', error: err.message }
+          : p
+      ));
+
+      if (ws) ws.close();
+      if (timeoutId) clearTimeout(timeoutId);
+
+      // 如果是连接错误，触发暂停
+      if (err.message.includes('WebSocket') || err.message.includes('连接') || err.message.includes('超时')) {
+        pauseGeneration(err.message);
+        return;  // 不再 throw，避免进一步错误处理
+      }
+
+      throw err;
     }
   };
 
-  // 图生图/ControlNet 循环执行模式
+  // 图生图/ControlNet 执行模式（简化版：每个 batchId 只有 1 个占位符）
   const generateWithRefImageLoop = async (promptId, promptText, refImage, batchId, savedParams = null) => {
     console.log('[generateWithRefImageLoop] 开始 - batchId:', batchId, 'mode:', refImage.mode);
 
-    // 首先上传参考图片到 ComfyUI（只上传一次）
+    // 首先上传参考图片到 ComfyUI
     const formData = new FormData();
     const uploadFilename = `ref_${promptId}_${Date.now()}.png`;
     formData.append('image', refImage.file, uploadFilename);
@@ -2287,295 +2287,290 @@ const App = () => {
     const uploadedFilename = uploadResult.name;
     console.log('[generateWithRefImageLoop] 参考图片上传成功:', uploadedFilename);
 
-    // 循环生成每张图片
-    for (let i = 0; i < batchSize; i++) {
-      console.log(`[generateWithRefImageLoop] 循环 ${i + 1}/${batchSize}`);
+    // 获取该 batchId 下的唯一占位符
+    const targetPlaceholder = imagePlaceholdersRef.current.find(p => p.batchId === batchId);
 
-      // 使用ref读取最新的占位符状态
-      const queuedPlaceholders = imagePlaceholdersRef.current.filter(p => p.batchId === batchId && p.status === 'queue');
-      let targetPlaceholder = queuedPlaceholders.length > 0 ? queuedPlaceholders[0] : null;
+    if (!targetPlaceholder) {
+      console.error('[generateWithRefImageLoop] 未找到占位符 - batchId:', batchId);
+      return;
+    }
 
-      // 如果没有queue状态的占位符了，结束循环
-      if (!targetPlaceholder) {
-        console.log('[generateWithRefImageLoop] 没有更多队列占位符，结束循环');
-        break;
+    console.log('[generateWithRefImageLoop] 目标占位符:', targetPlaceholder.id);
+
+    const clientId = generateClientId();
+    const uniqueId = `${batchId}_0`;
+    let ws = null;
+    let timeoutId = null;
+
+    try {
+      // 根据模式构建工作流
+      let workflowData;
+      const denoise = refImage.denoise ?? DEFAULT_IMG2IMG_DENOISE;
+      if (refImage.mode === 'direct') {
+        workflowData = buildImage2ImageWorkflow(uploadedFilename, promptText, savedParams, uniqueId, denoise);
+      } else {
+        workflowData = buildControlnetWorkflow(uploadedFilename, promptText, refImage.mode, savedParams, uniqueId, denoise);
       }
 
-      const clientId = generateClientId();
-      const uniqueId = `${batchId}_${i}`;
-      let ws = null;
-      let timeoutId = null;
+      const { workflow, seed } = workflowData;
+      console.log('[generateWithRefImageLoop] 构建工作流 - mode:', refImage.mode, 'seed:', seed);
 
-      try {
-        // 根据模式构建工作流
-        let workflowData;
-        const denoise = refImage.denoise ?? DEFAULT_IMG2IMG_DENOISE;
-        if (refImage.mode === 'direct') {
-          workflowData = buildImage2ImageWorkflow(uploadedFilename, promptText, savedParams, uniqueId, denoise);
-        } else {
-          workflowData = buildControlnetWorkflow(uploadedFilename, promptText, refImage.mode, savedParams, uniqueId, denoise);
-        }
+      // 保存种子到当前占位符
+      updateImagePlaceholders(prev => prev.map(p =>
+        p.id === targetPlaceholder.id ? { ...p, seed } : p
+      ));
 
-        const { workflow, seed } = workflowData;
-        console.log('[generateWithRefImageLoop] 构建工作流 - mode:', refImage.mode, 'seed:', seed);
+      // 创建WebSocket连接
+      ws = new WebSocket(getWebSocketUrl(clientId));
 
-        // 保存种子到当前占位符
-        updateImagePlaceholders(prev => prev.map(p =>
-          p.id === targetPlaceholder.id ? { ...p, seed } : p
-        ));
+      await new Promise((resolve, reject) => {
+        ws.onopen = () => {
+          console.log('WebSocket 连接成功');
 
-        // 创建WebSocket连接
-        ws = new WebSocket(getWebSocketUrl(clientId));
+          // WebSocket 连接成功，清除恢复状态（如果是恢复操作）
+          if (batchId && recoveryStateRef.current.pausedBatchId === batchId) {
+            console.log('恢复操作成功，清除恢复状态');
+            setRecoveryState({
+              isPaused: false,
+              pausedBatchId: null,
+              promptId: null,
+              pausedIndex: 0,
+              totalCount: 0,
+              savedParams: null,
+              reason: ''
+            });
+          }
 
-        await new Promise((resolve, reject) => {
-          ws.onopen = () => {
-            console.log('WebSocket 连接成功');
+          resolve();
+        };
 
-            // WebSocket 连接成功，清除恢复状态（如果是恢复操作）
-            if (batchId && recoveryStateRef.current.pausedBatchId === batchId) {
-              console.log('恢复操作成功，清除恢复状态');
-              setRecoveryState({
-                isPaused: false,
-                pausedBatchId: null,
-                promptId: null,
-                pausedIndex: 0,
-                totalCount: 0,
-                savedParams: null,
-                reason: ''
-              });
+        ws.onerror = (error) => {
+          console.error('WebSocket错误:', error);
+          reject(new Error('WebSocket连接失败'));
+        };
+
+        // 监听WebSocket异常关闭
+        ws.onclose = (event) => {
+          // 1000 是正常关闭，其他都是异常
+          if (event.code !== 1000 && event.code !== 1005) {
+            console.error('WebSocket异常关闭:', event.code, event.reason);
+            reject(new Error('WebSocket连接断开'));
+          }
+        };
+
+        // 监听WebSocket消息
+        ws.onmessage = async (event) => {
+          try {
+            // 过滤掉Blob类型的消息（预览图片）
+            if (typeof event.data !== 'string') {
+              return;
             }
 
-            resolve();
-          };
+            const message = JSON.parse(event.data);
+            const { type, data } = message;
 
-          ws.onerror = (error) => {
-            console.error('WebSocket错误:', error);
-            reject(new Error('WebSocket连接失败'));
-          };
-
-          // 监听WebSocket异常关闭
-          ws.onclose = (event) => {
-            // 1000 是正常关闭，其他都是异常
-            if (event.code !== 1000 && event.code !== 1005) {
-              console.error('WebSocket异常关闭:', event.code, event.reason);
-              reject(new Error('WebSocket连接断开'));
-            }
-          };
-
-          // 监听WebSocket消息
-          ws.onmessage = async (event) => {
-            try {
-              // 过滤掉Blob类型的消息（预览图片）
-              if (typeof event.data !== 'string') {
-                return;
+            // execution_start 消息 - 任务开始执行
+            if (type === 'execution_start') {
+              // 如果收到执行消息，说明连接是正常的，自动恢复连接状态
+              if (connectionStatus !== 'connected') {
+                setConnectionStatus('connected');
+                setConnectionMessage('已重新连接到 ComfyUI');
+                setShowNotification(true);
+                setTimeout(() => setShowNotification(false), 3000);
+                startHeartbeat();
               }
 
-              const message = JSON.parse(event.data);
-              const { type, data } = message;
+              updateImagePlaceholders(prev => prev.map(p =>
+                p.id === targetPlaceholder.id && p.status === 'queue' ? {
+                  ...p,
+                  isLoading: true
+                } : p
+              ));
+            }
 
-              // execution_start 消息 - 任务开始执行
-              if (type === 'execution_start') {
-                // 如果收到执行消息，说明连接是正常的，自动恢复连接状态
+            // 进度更新消息 - 只显示KSampler节点(节点4)的进度
+            if (type === 'progress') {
+              const { value, max, node } = data;
+              // 只处理采样器节点的进度，忽略预处理器进度
+              if (max > 0 && node === '4') {
+                // 如果收到进度消息，说明连接是正常的，自动恢复连接状态
                 if (connectionStatus !== 'connected') {
                   setConnectionStatus('connected');
                   setConnectionMessage('已重新连接到 ComfyUI');
                   setShowNotification(true);
                   setTimeout(() => setShowNotification(false), 3000);
                   startHeartbeat();
+                  reloadFailedImages();
                 }
 
-                updateImagePlaceholders(prev => prev.map(p =>
-                  p.id === targetPlaceholder.id && p.status === 'queue' ? {
-                    ...p,
-                    isLoading: true
-                  } : p
-                ));
+                const progressPercent = Math.floor((value / max) * 100);
+                updateImagePlaceholders(prev =>
+                  prev.map(p =>
+                    p.id === targetPlaceholder.id ? {
+                      ...p,
+                      status: 'generating',
+                      progress: progressPercent
+                    } : p
+                  )
+                );
               }
+            }
 
-              // 进度更新消息 - 只显示KSampler节点(节点4)的进度
-              if (type === 'progress') {
-                const { value, max, node } = data;
-                // 只处理采样器节点的进度，忽略预处理器进度
-                if (max > 0 && node === '4') {
-                  // 如果收到进度消息，说明连接是正常的，自动恢复连接状态
-                  if (connectionStatus !== 'connected') {
-                    setConnectionStatus('connected');
-                    setConnectionMessage('已重新连接到 ComfyUI');
-                    setShowNotification(true);
-                    setTimeout(() => setShowNotification(false), 3000);
-                    startHeartbeat();
-                    reloadFailedImages();
-                  }
+            // 执行状态消息
+            if (type === 'executing') {
+              const { node, prompt_id } = data;
 
-                  const progressPercent = Math.floor((value / max) * 100);
-                  updateImagePlaceholders(prev =>
-                    prev.map(p =>
-                      p.id === targetPlaceholder.id ? {
-                        ...p,
-                        status: 'generating',
-                        progress: progressPercent
-                      } : p
-                    )
-                  );
-                }
-              }
+              // 当node为null时，表示执行完成
+              if (node === null && prompt_id) {
+                console.log('[generateWithRefImageLoop] 执行完成 - prompt_id:', prompt_id);
 
-              // 执行状态消息
-              if (type === 'executing') {
-                const { node, prompt_id } = data;
+                // 获取生成的图像
+                const historyResponse = await fetch(`${COMFYUI_API}/history/${prompt_id}`, {
+              headers: getAuthHeaders()
+            });
+                const history = await historyResponse.json();
 
-                // 当node为null时，表示执行完成
-                if (node === null && prompt_id) {
-                  console.log('[generateWithRefImageLoop] 执行完成 - prompt_id:', prompt_id);
+                if (history[prompt_id] && history[prompt_id].outputs) {
+                  const outputs = history[prompt_id].outputs;
 
-                  // 获取生成的图像
-                  const historyResponse = await fetch(`${COMFYUI_API}/history/${prompt_id}`, {
-                headers: getAuthHeaders()
-              });
-                  const history = await historyResponse.json();
+                  // 收集所有图像，优先选择 SaveImage 节点的输出 (type='output')
+                  let savedImages = [];
+                  let previewImages = [];
 
-                  if (history[prompt_id] && history[prompt_id].outputs) {
-                    const outputs = history[prompt_id].outputs;
-
-                    // 收集所有图像，优先选择 SaveImage 节点的输出 (type='output')
-                    let savedImages = [];
-                    let previewImages = [];
-
-                    for (const nodeId in outputs) {
-                      if (outputs[nodeId].images) {
-                        outputs[nodeId].images.forEach(img => {
-                          if (img.type === 'output') {
-                            savedImages.push(img);
-                          } else {
-                            previewImages.push(img);
-                          }
-                        });
-                      }
-                    }
-
-                    // 优先使用 SaveImage 的输出，否则使用 PreviewImage 的输出
-                    const finalImage = savedImages[0] || previewImages[0];
-
-                    if (finalImage) {
-                      const imageUrl = getImageUrl(finalImage.filename, finalImage.subfolder, finalImage.type);
-
-                      console.log('[generateWithRefImageLoop] 获取到图片:', finalImage.filename, 'type:', finalImage.type);
-
-                      // 更新当前占位符为revealing状态
-                      updateImagePlaceholders(prev =>
-                        prev.map(p =>
-                          p.id === targetPlaceholder.id ? {
-                            ...p,
-                            status: 'revealing',
-                            progress: 100,
-                            imageUrl: imageUrl,
-                            filename: finalImage.filename
-                          } : p
-                        )
-                      );
-
-                      // 延迟后设置为completed
-                      setTimeout(() => {
-                        updateImagePlaceholders(prev => {
-                          const completedPlaceholders = prev.map(p =>
-                            p.id === targetPlaceholder.id ? { ...p, status: 'completed' } : p
-                          );
-
-                          // 如果启用了自动高清化
-                          if (autoUpscaleAfterGen) {
-                            const completedPlaceholder = completedPlaceholders.find(p => p.id === targetPlaceholder.id);
-                            if (completedPlaceholder && completedPlaceholder.status === 'completed') {
-                              setTimeout(() => queueUpscale(completedPlaceholder.id), 0);
-                            }
-                          }
-
-                          return completedPlaceholders;
-                        });
-                      }, 800);
+                  for (const nodeId in outputs) {
+                    if (outputs[nodeId].images) {
+                      outputs[nodeId].images.forEach(img => {
+                        if (img.type === 'output') {
+                          savedImages.push(img);
+                        } else {
+                          previewImages.push(img);
+                        }
+                      });
                     }
                   }
 
-                  if (ws) ws.close();
-                  if (timeoutId) clearTimeout(timeoutId);
-                  resolve();
-                }
-              }
+                  // 优先使用 SaveImage 的输出，否则使用 PreviewImage 的输出
+                  const finalImage = savedImages[0] || previewImages[0];
 
-              // 执行错误消息
-              if (type === 'execution_error') {
-                console.error('执行错误:', data);
+                  if (finalImage) {
+                    const imageUrl = getImageUrl(finalImage.filename, finalImage.subfolder, finalImage.type);
+
+                    console.log('[generateWithRefImageLoop] 获取到图片:', finalImage.filename, 'type:', finalImage.type);
+
+                    // 更新当前占位符为revealing状态
+                    updateImagePlaceholders(prev =>
+                      prev.map(p =>
+                        p.id === targetPlaceholder.id ? {
+                          ...p,
+                          status: 'revealing',
+                          progress: 100,
+                          imageUrl: imageUrl,
+                          filename: finalImage.filename
+                        } : p
+                      )
+                    );
+
+                    // 延迟后设置为completed
+                    setTimeout(() => {
+                      updateImagePlaceholders(prev => {
+                        const completedPlaceholders = prev.map(p =>
+                          p.id === targetPlaceholder.id ? { ...p, status: 'completed' } : p
+                        );
+
+                        // 如果启用了自动高清化
+                        if (autoUpscaleAfterGen) {
+                          const completedPlaceholder = completedPlaceholders.find(p => p.id === targetPlaceholder.id);
+                          if (completedPlaceholder && completedPlaceholder.status === 'completed') {
+                            setTimeout(() => queueUpscale(completedPlaceholder.id), 0);
+                          }
+                        }
+
+                        return completedPlaceholders;
+                      });
+                    }, 800);
+                  }
+                }
+
                 if (ws) ws.close();
                 if (timeoutId) clearTimeout(timeoutId);
-                reject(new Error(data.exception_message || '未知错误'));
+                resolve();
               }
-            } catch (err) {
-              console.error('消息处理错误:', err);
             }
-          };
-        });
 
-        // 等待WebSocket连接建立
-        if (ws.readyState !== WebSocket.OPEN) {
-          await new Promise((resolve) => {
-            ws.addEventListener('open', resolve, { once: true });
-          });
-        }
+            // 执行错误消息
+            if (type === 'execution_error') {
+              console.error('执行错误:', data);
+              if (ws) ws.close();
+              if (timeoutId) clearTimeout(timeoutId);
+              reject(new Error(data.exception_message || '未知错误'));
+            }
+          } catch (err) {
+            console.error('消息处理错误:', err);
+          }
+        };
+      });
 
-        // 提交prompt到ComfyUI
-        const promptResponse = await fetch(`${COMFYUI_API}/prompt`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            prompt: workflow,
-            client_id: clientId
-          }),
-        });
-
-        if (!promptResponse.ok) {
-          const errorData = await promptResponse.json().catch(() => ({}));
-          console.error('[generateWithRefImageLoop] ComfyUI 错误响应:', errorData);
-          console.error('[generateWithRefImageLoop] 发送的工作流:', JSON.stringify(workflow, null, 2));
-          throw new Error(`提交任务失败: ${errorData.error || errorData.node_errors ? JSON.stringify(errorData.node_errors || errorData.error) : promptResponse.status}`);
-        }
-
-        // 设置超时
-        timeoutId = setTimeout(() => {
-          if (ws) ws.close();
-        }, 180000); // 3分钟超时
-
-        // 等待当前循环完成
+      // 等待WebSocket连接建立
+      if (ws.readyState !== WebSocket.OPEN) {
         await new Promise((resolve) => {
-          const checkInterval = setInterval(() => {
-            if (ws.readyState === WebSocket.CLOSED) {
-              clearInterval(checkInterval);
-              resolve();
-            }
-          }, 100);
+          ws.addEventListener('open', resolve, { once: true });
         });
-
-      } catch (err) {
-        console.error(`[generateWithRefImageLoop] 循环 ${i + 1} 错误:`, err);
-
-        // 重置当前占位符为 failed
-        updateImagePlaceholders(prev => prev.map(p =>
-          p.id === targetPlaceholder.id && p.status === 'generating'
-            ? { ...p, status: 'failed', error: err.message }
-            : p
-        ));
-
-        if (ws) ws.close();
-        if (timeoutId) clearTimeout(timeoutId);
-
-        // 如果是连接错误，触发暂停
-        if (err.message.includes('WebSocket') || err.message.includes('连接') || err.message.includes('超时')) {
-          pauseGeneration(err.message);
-          break;  // 中断循环
-        }
-
-        throw err;
       }
+
+      // 提交prompt到ComfyUI
+      const promptResponse = await fetch(`${COMFYUI_API}/prompt`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: workflow,
+          client_id: clientId
+        }),
+      });
+
+      if (!promptResponse.ok) {
+        const errorData = await promptResponse.json().catch(() => ({}));
+        console.error('[generateWithRefImageLoop] ComfyUI 错误响应:', errorData);
+        console.error('[generateWithRefImageLoop] 发送的工作流:', JSON.stringify(workflow, null, 2));
+        throw new Error(`提交任务失败: ${errorData.error || errorData.node_errors ? JSON.stringify(errorData.node_errors || errorData.error) : promptResponse.status}`);
+      }
+
+      // 设置超时
+      timeoutId = setTimeout(() => {
+        if (ws) ws.close();
+      }, 180000); // 3分钟超时
+
+      // 等待生成完成
+      await new Promise((resolve) => {
+        const checkInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.CLOSED) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 100);
+      });
+
+    } catch (err) {
+      console.error('[generateWithRefImageLoop] 生成错误:', err);
+
+      // 重置当前占位符为 failed
+      updateImagePlaceholders(prev => prev.map(p =>
+        p.id === targetPlaceholder.id && p.status === 'generating'
+          ? { ...p, status: 'failed', error: err.message }
+          : p
+      ));
+
+      if (ws) ws.close();
+      if (timeoutId) clearTimeout(timeoutId);
+
+      // 如果是连接错误，触发暂停
+      if (err.message.includes('WebSocket') || err.message.includes('连接') || err.message.includes('超时')) {
+        pauseGeneration(err.message);
+        return;  // 不再 throw，避免进一步错误处理
+      }
+
+      throw err;
     }
   };
 
