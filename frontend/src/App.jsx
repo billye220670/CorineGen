@@ -3613,13 +3613,11 @@ const App = () => {
       {showRestoreDialog && restoredSession && (
         <div className="restore-dialog-overlay">
           <div className="restore-dialog">
-            <h2>🔄 检测到未完成的生成任务</h2>
+            <h2>检测到上次会话</h2>
 
             <div className="restore-info">
               <p>
-                上次会话包含 <strong>{restoredSession.queue.length}</strong> 个待执行任务，
-                <strong>{restoredSession.placeholders.filter(p => p.status !== 'completed').length}</strong> 张恢复中图片，
-                和 <strong>{restoredSession.placeholders.filter(p => p.status === 'completed').length}</strong> 张已生成图片
+                上次会话包含 <strong>{restoredSession.placeholders.length}</strong> 张已生成图片
               </p>
               <p className="restore-time">
                 最后更新时间：{new Date(restoredSession.timestamp).toLocaleString('zh-CN')}

@@ -3798,7 +3798,7 @@ body {
 }
 
 /* ========================================
-   恢复会话对话框样式
+   恢复会话对话框样式（与提示词助理面板风格一致）
    ======================================== */
 .restore-dialog-overlay {
   position: fixed;
@@ -3806,16 +3806,15 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10000;
-  animation: fadeIn 0.2s ease-out;
+  animation: restoreDialogFadeIn 0.2s ease;
 }
 
-@keyframes fadeIn {
+@keyframes restoreDialogFadeIn {
   from {
     opacity: 0;
   }
@@ -3825,22 +3824,23 @@ body {
 }
 
 .restore-dialog {
-  background: var(--card-bg);
+  background: hsl(var(--theme-hue), 15%, 12%);
   border-radius: 12px;
   padding: 30px;
   max-width: 500px;
   width: 90%;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  animation: slideUp 0.3s ease-out;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  animation: restoreDialogSlideIn 0.3s ease;
+  overflow: hidden;
 }
 
-@keyframes slideUp {
+@keyframes restoreDialogSlideIn {
   from {
-    transform: translateY(20px);
+    transform: scale(0.9);
     opacity: 0;
   }
   to {
-    transform: translateY(0);
+    transform: scale(1);
     opacity: 1;
   }
 }
@@ -3848,14 +3848,20 @@ body {
 .restore-dialog h2 {
   margin: 0 0 20px 0;
   font-size: 20px;
-  color: var(--text-primary);
+  color: rgba(255, 255, 255, 0.95);
   font-weight: 600;
+  background: linear-gradient(135deg,
+    hsl(var(--theme-hue), 70%, 75%) 0%,
+    hsl(calc(var(--theme-hue) + 30), 75%, 70%) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .restore-info {
   margin-bottom: 25px;
   line-height: 1.6;
-  color: var(--text-primary);
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .restore-info p {
@@ -3863,12 +3869,12 @@ body {
 }
 
 .restore-info strong {
-  color: var(--primary-color);
+  color: hsl(var(--theme-hue), 70%, 70%);
   font-weight: 600;
 }
 
 .restore-time {
-  color: var(--text-secondary) !important;
+  color: rgba(255, 255, 255, 0.5) !important;
   font-size: 14px;
   margin-top: 10px !important;
 }
@@ -3879,21 +3885,28 @@ body {
   justify-content: flex-end;
 }
 
+/* 恢复对话框中的主按钮（复用 generate-all-button）调整 */
+.restore-dialog .generate-all-button {
+  width: auto;
+  padding: 12px 24px;
+}
+
 .restore-btn-primary {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%);
+  background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-primary-dark) 100%);
   color: white;
   border: none;
-  padding: 10px 24px;
+  padding: 12px 24px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 15px;
-  font-weight: 500;
-  transition: all 0.2s;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px var(--theme-border);
 }
 
 .restore-btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 30px var(--theme-border);
 }
 
 .restore-btn-primary:active {
@@ -3901,20 +3914,21 @@ body {
 }
 
 .restore-btn-secondary {
-  background: var(--card-bg);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-  padding: 10px 24px;
+  background: hsla(var(--theme-hue), 15%, 20%, 1);
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid hsla(var(--theme-hue), 20%, 30%, 1);
+  padding: 12px 24px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 15px;
-  transition: all 0.2s;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
 .restore-btn-secondary:hover {
-  background: var(--hover-bg);
-  border-color: var(--primary-color);
-  color: var(--text-primary);
+  background: hsla(var(--theme-hue), 15%, 25%, 1);
+  border-color: hsl(var(--theme-hue), 70%, 65%);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .restore-btn-secondary:active {
@@ -3923,30 +3937,44 @@ body {
 
 /* 浅色模式样式 */
 .light-mode .restore-dialog {
-  background: hsl(0, 0%, 98%);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  background: hsl(var(--theme-hue), 25%, 95%);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
 }
 
 .light-mode .restore-dialog h2 {
-  color: hsl(0, 0%, 20%);
+  background: linear-gradient(135deg,
+    hsl(var(--theme-hue), 65%, 45%) 0%,
+    hsl(calc(var(--theme-hue) + 30), 70%, 50%) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .light-mode .restore-info {
-  color: hsl(0, 0%, 30%);
+  color: rgba(60, 60, 60, 0.85);
+}
+
+.light-mode .restore-info strong {
+  color: hsl(var(--theme-hue), 65%, 45%);
 }
 
 .light-mode .restore-time {
-  color: hsl(0, 0%, 50%) !important;
+  color: rgba(60, 60, 60, 0.5) !important;
 }
 
 .light-mode .restore-btn-secondary {
-  background: hsl(0, 0%, 95%);
-  color: hsl(0, 0%, 40%);
-  border-color: hsl(0, 0%, 85%);
+  background: hsl(var(--theme-hue), 20%, 90%);
+  color: rgba(60, 60, 60, 0.7);
+  border-color: hsl(var(--theme-hue), 20%, 80%);
 }
 
 .light-mode .restore-btn-secondary:hover {
-  background: hsl(0, 0%, 90%);
+  background: hsl(var(--theme-hue), 20%, 85%);
+  border-color: hsl(var(--theme-hue), 65%, 55%);
+  color: rgba(30, 30, 30, 0.9);
+}
+
+.light-mode .restore-btn-primary {
   color: hsl(0, 0%, 20%);
 }
 
@@ -3966,7 +3994,8 @@ body {
   }
 
   .restore-btn-primary,
-  .restore-btn-secondary {
+  .restore-btn-secondary,
+  .restore-dialog .generate-all-button {
     width: 100%;
   }
 }
