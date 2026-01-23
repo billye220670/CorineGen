@@ -3312,6 +3312,9 @@ body {
   border-radius: 8px 8px 0 0;
   transition: all 0.2s ease;
   position: relative;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .prompt-assistant-tab:hover {
@@ -4073,6 +4076,31 @@ body {
   .restore-btn-secondary,
   .restore-dialog .generate-all-button {
     width: 100%;
+  }
+
+  /* 提示词助理面板 - 手机端优化 */
+  .prompt-assistant-tabs {
+    gap: 4px;
+    padding: 12px 16px 0 16px;
+  }
+
+  .prompt-assistant-tab {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .prompt-assistant-content {
+    padding: 16px;
+    gap: 16px;
+    flex-direction: column;
+  }
+
+  .prompt-assistant-left {
+    flex: 0 0 auto;
+  }
+
+  .prompt-assistant-right {
+    flex: 1;
   }
 }
 
