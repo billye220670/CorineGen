@@ -745,17 +745,17 @@ body {
 .textarea-wrapper::after {
   content: '';
   position: absolute;
-  bottom: 2px; /* 留出边框空间 */
-  left: 2px;
-  right: 2px;
-  height: 44px; /* 覆盖按钮区域 */
+  bottom: 4px; /* 留出边框空间 - 增大到 4px 避免遮挡底部边框 */
+  left: 4px; /* 左右也增大到 4px */
+  right: 4px;
+  height: 42px; /* 稍微减小高度，从 44px 改为 42px */
   background: linear-gradient(
     to bottom,
     transparent 0%,
     hsla(calc(var(--theme-hue) * 1), calc(var(--theme-bg-saturation) * 1%), calc(var(--theme-bg-lightness) * 0.375%), 0.85) 30%,
     hsla(calc(var(--theme-hue) * 1), calc(var(--theme-bg-saturation) * 1%), calc(var(--theme-bg-lightness) * 0.375%), 1) 100%
   );
-  border-radius: 0 0 6px 6px;
+  border-radius: 0 0 4px 4px; /* 稍微减小圆角，从 6px 改为 4px */
   pointer-events: none; /* 允许点击穿透到下面的按钮 */
   z-index: 5;
 }
@@ -768,6 +768,14 @@ body {
     hsla(var(--theme-hue), 20%, 88%, 0.85) 30%,
     hsla(var(--theme-hue), 20%, 88%, 1) 100%
   );
+}
+
+/* 所有按钮禁用文本选择 - 优化移动端体验 */
+button {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }
 
 /* 删除按钮 - 右上角 */
