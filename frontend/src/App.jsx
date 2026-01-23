@@ -4733,13 +4733,6 @@ const App = () => {
                           }}
                           onMouseUp={handleLongPressEnd}
                           onMouseLeave={handleLongPressEnd}
-                          onTouchStart={() => {
-                            if (placeholder.status === 'completed' && !isMultiSelectMode) {
-                              handleLongPressStart(placeholder.id);
-                            }
-                          }}
-                          onTouchEnd={handleLongPressEnd}
-                          onTouchCancel={handleLongPressEnd}
                           className={`generated-image ${placeholder.status === 'revealing' || placeholder.status === 'completed' ? 'revealing' : ''} ${placeholder.upscaleStatus === 'upscaling' ? 'upscaling-blur' : ''}`}
                           style={{ pointerEvents: placeholder.status === 'completed' ? 'auto' : 'none' }}
                           draggable={placeholder.status === 'completed' && placeholder.seed !== null && !isMultiSelectMode}
