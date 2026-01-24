@@ -17,7 +17,7 @@ import { generatePrompt } from './services/promptAssistantApi.js';
 import { SessionManager } from './services/sessionManager.js';
 
 // 应用版本号
-const APP_VERSION = '1.2.0';  // 会话恢复功能：刷新页面后自动恢复生成队列和历史记录
+const APP_VERSION = '1.2.1';  // WebSocket 连接诊断日志增强
 
 // 图生图/ControlNet 降噪强度默认值
 const DEFAULT_IMG2IMG_DENOISE = 1;
@@ -1804,12 +1804,32 @@ const App = () => {
       ));
 
       // 创建WebSocket连接
-      ws = new WebSocket(getWebSocketUrl(clientId));
+      const wsUrl = getWebSocketUrl(clientId);
+      console.log('[WS] 创建 WebSocket 连接:', {
+        url: wsUrl,
+        clientId: clientId,
+        batchId: batchId,
+        time: new Date().toLocaleString('zh-CN')
+      });
+      ws = new WebSocket(wsUrl);
 
-      ws.onopen = () => {};
+      ws.onopen = () => {
+        console.log('[WS] ✅ WebSocket 连接成功:', {
+          clientId: clientId,
+          batchId: batchId,
+          readyState: ws.readyState,
+          time: new Date().toLocaleString('zh-CN')
+        });
+      };
 
       ws.onerror = (error) => {
-        console.error('WebSocket错误:', error);
+        console.error('[WS] ❌ WebSocket 错误:', {
+          clientId: clientId,
+          batchId: batchId,
+          error: error,
+          readyState: ws.readyState,
+          time: new Date().toLocaleString('zh-CN')
+        });
         setError('WebSocket连接失败');
         isGeneratingRef.current = false;
         setIsGenerating(false);
@@ -1817,9 +1837,17 @@ const App = () => {
 
       // 监听WebSocket异常关闭
       ws.onclose = (event) => {
+        console.log('[WS] 🔌 WebSocket 关闭:', {
+          clientId: clientId,
+          batchId: batchId,
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+          time: new Date().toLocaleString('zh-CN')
+        });
         // 1000 是正常关闭，其他都是异常
         if (event.code !== 1000 && event.code !== 1005) {
-          console.error('WebSocket异常关闭:', event.code, event.reason);
+          console.error('[WS] ⚠️ WebSocket 异常关闭:', event.code, event.reason);
           // 触发暂停机制
           pauseGeneration('WebSocket连接断开');
         }
@@ -1836,8 +1864,22 @@ const App = () => {
           const message = JSON.parse(event.data);
           const { type, data } = message;
 
+          console.log('[WS] 📨 收到消息:', {
+            type: type,
+            clientId: clientId,
+            batchId: batchId,
+            data: data,
+            time: new Date().toLocaleString('zh-CN')
+          });
+
           // execution_start 消息 - 任务开始执行（模型可能正在加载）
           if (type === 'execution_start') {
+            console.log('[WS] 🚀 execution_start - 任务开始执行:', {
+              clientId: clientId,
+              batchId: batchId,
+              connectionStatus: connectionStatus,
+              time: new Date().toLocaleString('zh-CN')
+            });
             // 如果收到执行消息，说明连接是正常的，自动恢复连接状态
             if (connectionStatus !== 'connected') {
               setConnectionStatus('connected');
@@ -1858,6 +1900,14 @@ const App = () => {
 
           // 进度更新消息 - 批次模式下所有图片共享进度
           if (type === 'progress') {
+            console.log('[WS] 📊 progress - 进度更新:', {
+              clientId: clientId,
+              batchId: batchId,
+              value: data.value,
+              max: data.max,
+              percent: Math.floor((data.value / data.max) * 100) + '%',
+              time: new Date().toLocaleString('zh-CN')
+            });
             // 如果收到进度消息，说明连接是正常的，自动恢复连接状态
             if (connectionStatus !== 'connected') {
               setConnectionStatus('connected');
@@ -1886,9 +1936,23 @@ const App = () => {
           // 执行状态消息
           if (type === 'executing') {
             const { node, prompt_id } = data;
+            console.log('[WS] ⚙️ executing - 执行状态:', {
+              clientId: clientId,
+              batchId: batchId,
+              node: node,
+              prompt_id: prompt_id,
+              isComplete: node === null,
+              time: new Date().toLocaleString('zh-CN')
+            });
 
             // 当node为null时，表示执行完成
             if (node === null && prompt_id) {
+              console.log('[WS] ✅ 任务执行完成，获取生成结果:', {
+                clientId: clientId,
+                batchId: batchId,
+                prompt_id: prompt_id,
+                time: new Date().toLocaleString('zh-CN')
+              });
               // 获取生成的图像
               const historyResponse = await fetch(`${COMFYUI_API}/history/${prompt_id}`, {
                 headers: getAuthHeaders()
@@ -1980,6 +2044,13 @@ const App = () => {
               }
 
               // 注意：这里不需要设置 isGeneratingRef，会由 generateForPrompt 的 finally 块统一处理
+              console.log('[WS] ✅ WebSocket 正常收到完成消息，任务处理完成:', {
+                clientId: clientId,
+                batchId: batchId,
+                prompt_id: prompt_id,
+                imagesCount: images.length,
+                time: new Date().toLocaleString('zh-CN')
+              });
               setIsGenerating(false);
               if (ws) ws.close();
               if (timeoutId) clearTimeout(timeoutId);
@@ -1988,7 +2059,13 @@ const App = () => {
 
           // 执行错误消息
           if (type === 'execution_error') {
-            console.error('执行错误:', data);
+            console.error('[WS] ❌ 执行错误:', {
+              clientId: clientId,
+              batchId: batchId,
+              error: data.exception_message || '未知错误',
+              data: data,
+              time: new Date().toLocaleString('zh-CN')
+            });
             setError('生成失败: ' + (data.exception_message || '未知错误'));
             // 注意：这里不需要设置 isGeneratingRef，会由 generateForPrompt 的 finally 块统一处理
             setIsGenerating(false);
@@ -2102,11 +2179,25 @@ const App = () => {
       ));
 
       // 创建WebSocket连接
-      ws = new WebSocket(getWebSocketUrl(clientId));
+      const wsUrl = getWebSocketUrl(clientId);
+      console.log('[WS-Loop] 创建 WebSocket 连接:', {
+        url: wsUrl,
+        clientId: clientId,
+        placeholderId: targetPlaceholder.id,
+        batchId: batchId,
+        time: new Date().toLocaleString('zh-CN')
+      });
+      ws = new WebSocket(wsUrl);
 
       await new Promise((resolve, reject) => {
         ws.onopen = () => {
-          console.log('WebSocket 连接成功');
+          console.log('[WS-Loop] ✅ WebSocket 连接成功:', {
+            clientId: clientId,
+            placeholderId: targetPlaceholder.id,
+            batchId: batchId,
+            readyState: ws.readyState,
+            time: new Date().toLocaleString('zh-CN')
+          });
 
           // WebSocket 连接成功，清除恢复状态（如果是恢复操作）
           if (batchId && recoveryStateRef.current.pausedBatchId === batchId) {
@@ -2126,15 +2217,29 @@ const App = () => {
         };
 
         ws.onerror = (error) => {
-          console.error('WebSocket错误:', error);
+          console.error('[WS-Loop] ❌ WebSocket 错误:', {
+            clientId: clientId,
+            batchId: batchId,
+            error: error,
+            readyState: ws.readyState,
+            time: new Date().toLocaleString('zh-CN')
+          });
           reject(new Error('WebSocket连接失败'));
         };
 
         // 监听WebSocket异常关闭
         ws.onclose = (event) => {
+          console.log('[WS-Loop] 🔌 WebSocket 关闭:', {
+            clientId: clientId,
+            batchId: batchId,
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean,
+            time: new Date().toLocaleString('zh-CN')
+          });
           // 1000 是正常关闭，其他都是异常
           if (event.code !== 1000 && event.code !== 1005) {
-            console.error('WebSocket异常关闭:', event.code, event.reason);
+            console.error('[WS-Loop] ⚠️ WebSocket 异常关闭:', event.code, event.reason);
             reject(new Error('WebSocket连接断开'));
           }
         };
@@ -2324,23 +2429,49 @@ const App = () => {
       // 当 WebSocket 消息丢失时，轮询作为后备机制确保任务完成能被检测到
       const promptIdForPoll = result.prompt_id;
       if (promptIdForPoll) {
-        console.log('[generateLoop] 启动轮询 - promptId:', promptIdForPoll, 'placeholderId:', targetPlaceholder.id);
+        console.log('[轮询] 🔄 启动后备轮询机制:', {
+          promptId: promptIdForPoll,
+          placeholderId: targetPlaceholder.id,
+          batchId: batchId,
+          reason: 'WebSocket 可能丢失消息，启动轮询作为后备',
+          time: new Date().toLocaleString('zh-CN')
+        });
         pollInterval = setInterval(async () => {
           if (pollCompleted) return;
           try {
-            console.log('[generateLoop] 轮询检查中 - promptId:', promptIdForPoll);
+            console.log('[轮询] 🔍 检查任务状态:', {
+              promptId: promptIdForPoll,
+              placeholderId: targetPlaceholder.id,
+              time: new Date().toLocaleString('zh-CN')
+            });
             const historyResponse = await fetch(`${COMFYUI_API}/history/${promptIdForPoll}`, {
               headers: getAuthHeaders()
             });
             const history = await historyResponse.json();
             const hasOutputs = !!history[promptIdForPoll]?.outputs;
-            console.log('[generateLoop] 轮询结果 - hasOutputs:', hasOutputs, 'promptId:', promptIdForPoll);
+            console.log('[轮询] 📋 轮询结果:', {
+              promptId: promptIdForPoll,
+              hasOutputs: hasOutputs,
+              placeholderId: targetPlaceholder.id,
+              time: new Date().toLocaleString('zh-CN')
+            });
             if (hasOutputs) {
               // 任务已完成，检查占位符状态
               const placeholder = imagePlaceholdersRef.current.find(p => p.id === targetPlaceholder.id);
-              console.log('[generateLoop] 检查占位符 - found:', !!placeholder, 'status:', placeholder?.status);
+              console.log('[轮询] 🔎 检查占位符状态:', {
+                placeholderId: targetPlaceholder.id,
+                found: !!placeholder,
+                status: placeholder?.status,
+                time: new Date().toLocaleString('zh-CN')
+              });
               if (placeholder && placeholder.status !== 'completed' && placeholder.status !== 'revealing') {
-                console.warn('[generateLoop] 轮询检测到任务完成但 WebSocket 未通知，手动处理 - placeholderId:', targetPlaceholder.id, 'status:', placeholder.status);
+                console.warn('[轮询] ⚠️ WebSocket 未收到完成消息，轮询接管处理:', {
+                  placeholderId: targetPlaceholder.id,
+                  currentStatus: placeholder.status,
+                  expectedStatus: 'completed',
+                  reason: 'WebSocket 可能断开或消息丢失',
+                  time: new Date().toLocaleString('zh-CN')
+                });
                 pollCompleted = true;
                 clearInterval(pollInterval);
 
@@ -2351,7 +2482,12 @@ const App = () => {
                     const img = outputs[nodeId].images[0];
                     const imageUrl = getImageUrl(img.filename, img.subfolder, img.type);
 
-                    console.log('[generateLoop] 轮询获取到图片:', img.filename);
+                    console.log('[轮询] 🖼️ 轮询获取到图片:', {
+                      filename: img.filename,
+                      placeholderId: targetPlaceholder.id,
+                      imageUrl: imageUrl,
+                      time: new Date().toLocaleString('zh-CN')
+                    });
 
                     // 更新占位符为revealing状态
                     updateImagePlaceholders(prev =>
@@ -2396,7 +2532,11 @@ const App = () => {
             }
           } catch (e) {
             // 轮询错误静默处理，不影响正常流程
-            console.debug('[generateLoop] 轮询检查失败:', e.message);
+            console.debug('[轮询] ❌ 轮询检查失败:', {
+              error: e.message,
+              promptId: promptIdForPoll,
+              time: new Date().toLocaleString('zh-CN')
+            });
           }
         }, 2000);
       }
@@ -2528,15 +2668,29 @@ const App = () => {
         };
 
         ws.onerror = (error) => {
-          console.error('WebSocket错误:', error);
+          console.error('[WS-Loop] ❌ WebSocket 错误:', {
+            clientId: clientId,
+            batchId: batchId,
+            error: error,
+            readyState: ws.readyState,
+            time: new Date().toLocaleString('zh-CN')
+          });
           reject(new Error('WebSocket连接失败'));
         };
 
         // 监听WebSocket异常关闭
         ws.onclose = (event) => {
+          console.log('[WS-Loop] 🔌 WebSocket 关闭:', {
+            clientId: clientId,
+            batchId: batchId,
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean,
+            time: new Date().toLocaleString('zh-CN')
+          });
           // 1000 是正常关闭，其他都是异常
           if (event.code !== 1000 && event.code !== 1005) {
-            console.error('WebSocket异常关闭:', event.code, event.reason);
+            console.error('[WS-Loop] ⚠️ WebSocket 异常关闭:', event.code, event.reason);
             reject(new Error('WebSocket连接断开'));
           }
         };
